@@ -2,11 +2,14 @@
 
 ## Última actualización
 
-2026-09-16 — documentación arquitectónica inicial.
+2026-09-16 — Entrega 1 en progreso; checkpoint de la base técnica reproducible.
 
 ## Estado global
 
-**Planificación arquitectónica documentada; implementación no iniciada.**
+**Entrega 1 / Base técnica reproducible en progreso.** La estructura inicial de backend,
+frontend, PostgreSQL, migraciones, automatización y calidad está creada, pero la entrega
+no está cerrada: falta completar la instalación limpia interrumpida, los smoke tests y
+la revisión final antes del commit definitivo.
 
 ## Completado
 
@@ -22,7 +25,7 @@
 - [x] Estrategia de backups y restauración.
 - [x] Primera revisión arquitectónica independiente y corrección de hallazgos.
 - [x] Segunda/tercera revisión arquitectónica sin hallazgos críticos/altos (architect reviewer, 2026-09-16).
-- [ ] Base técnica.
+- [ ] Base técnica (Entrega 1 en progreso; checkpoint WIP creado antes de la verificación final).
 - [ ] Código funcional.
 
 ## Decisiones oficiales
@@ -40,9 +43,11 @@
 
 ## Próxima entrega
 
-**Entrega 1: Base técnica reproducible**, seguida de **Entrega 2: Identidad, RBAC y Auditoría base**.
+**Completar Entrega 1: Base técnica reproducible**, seguida —solo con aprobación explícita— de
+**Entrega 2: Identidad, RBAC y Auditoría base**.
 
-No iniciar hasta aprobación explícita del usuario. Antes de ejecutar se debe crear un plan técnico detallado para la entrega, usar TDD y preparar una rama/worktree de trabajo.
+La Entrega 1 fue aprobada y está en desarrollo en `delivery/01-foundation`. No iniciar la
+Entrega 2 sin aprobación explícita del usuario.
 
 Evidencia documental actual: los nueve archivos requeridos, verificación local de enlaces/whitespace/placeholders y tercera revisión arquitectónica independiente sin hallazgos Critical/Important. Los artefactos automatizados bajo `artifacts/quality/` comenzarán con la Entrega 1.
 

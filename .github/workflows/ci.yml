@@ -1,0 +1,80 @@
+name: quality
+
+on:
+  push:
+    branches: [master, "delivery/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-toolchains:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend locked install and checks
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-groups
+          uv lock --check
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run mypy src tests
+          uv run pytest -m "not integration"
+      - name: Frontend locked install and checks
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+        env:
+          BACKEND_INTERNAL_URL: http://127.0.0.1:8000
+
+  postgresql-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.14-alpine
+        env:
+          POSTGRES_DB: avicola_pro_test
+          POSTGRES_USER: avicola
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U avicola -d avicola_pro_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+          enable-cache: true
+      - name: Install backend from lockfile
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+      - name: Migrate and test with PostgreSQL 16
+        working-directory: backend
+        run: |
+          uv run alembic upgrade head
+          uv run pytest
+        env:
+          AVICOLA_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+          AVICOLA_TEST_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+

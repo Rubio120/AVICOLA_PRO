@@ -1,0 +1,1 @@
+"""purchasing domain layer."""

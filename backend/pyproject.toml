@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avicola-pro-backend"
+version = "0.1.0"
+description = "Backend modular de AVÍCOLA PRO"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "alembic>=1.20,<2",
+  "fastapi>=0.141,<1",
+  "psycopg[binary,pool]>=3.3,<4",
+  "pydantic-settings>=2.15,<3",
+  "sqlalchemy[asyncio]>=2.0.53,<2.1",
+  "structlog>=26.1,<27",
+  "uvicorn[standard]>=0.53,<1",
+]
+
+[dependency-groups]
+dev = [
+  "asgi-lifespan>=2.1,<3",
+  "httpx>=0.28,<1",
+  "mypy>=2.3,<3",
+  "pip-audit>=2.10,<3",
+  "postgresql-binaries==16.14.0",
+  "pytest>=9.1,<10",
+  "pytest-asyncio>=1.4,<2",
+  "pytest-cov>=7,<8",
+  "ruff>=0.16.7,<0.17",
+  "testcontainers[postgres]>=4.15,<5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avicola_pro"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=avicola_pro --cov-branch --cov-report=term-missing --cov-fail-under=80"
+asyncio_mode = "strict"
+testpaths = ["tests"]
+markers = ["integration: requires a real PostgreSQL database"]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S603"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["avicola_pro"]
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["testcontainers.*"]
+ignore_missing_imports = true
