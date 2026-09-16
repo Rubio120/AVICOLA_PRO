@@ -6,6 +6,10 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 
 ### Added
 
+- Base técnica reproducible de Entrega 1: FastAPI, PostgreSQL/Alembic, Next.js, CI, health/readiness, logging, Problem Details y límites arquitectónicos.
+- Contexto maestro de continuidad en `PROJECT_CONTEXT.md`.
+- Selector event loop explícito para compatibilidad de Psycopg async con Windows.
+
 - Especificación arquitectónica de V1.
 - Modelo lógico inicial de PostgreSQL.
 - Estrategia de seguridad, auditoría y permisos.
@@ -31,3 +35,10 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 - Operación V1 exclusivamente en moneda base PYG.
 - Auditoría inmutable separada del lifecycle mutable de outbox.
 - Contratos neutrales de eventos para evitar dependencia Producción-Costos.
+
+### Fixed
+
+- El gate PowerShell ahora falla inmediatamente cuando un comando nativo devuelve código distinto de cero.
+- El gate local configura la base PostgreSQL de integración preparada por los scripts.
+- Las pruebas de configuración validan de forma aislada credenciales placeholder y CORS wildcard.
+- El lint frontend ya no emite advertencias por exportación anónima.

@@ -9,9 +9,9 @@ if (-not $env:AVICOLA_DATABASE_URL) {
 
 Push-Location (Join-Path $projectRoot "backend")
 try {
-    uv run uvicorn avicola_pro.bootstrap.app:create_app --factory --host 127.0.0.1 --port 8000 --reload
+    uv run uvicorn avicola_pro.bootstrap.app:create_app --factory --host 127.0.0.1 --port 8000 --reload --loop avicola_pro.bootstrap.runtime:selector_loop_factory
+    if ($LASTEXITCODE -ne 0) { throw "backend server failed with exit code $LASTEXITCODE" }
 }
 finally {
     Pop-Location
 }
-

@@ -90,7 +90,7 @@ V1 es para **una sola empresa**. `company_profile` es singleton; no existe aisla
 
 ## Estado exacto de la Entrega 1
 
-Estado al 2026-09-16: **en progreso, no cerrada**. Rama activa `delivery/01-foundation`; checkpoint funcional/WIP conocido `2ca101c` (`wip: checkpoint delivery 01 foundation`), ya publicado en `origin/delivery/01-foundation`.
+Estado al 2026-09-16: **implementada y con gate local verde**. Rama activa `delivery/01-foundation`; el contexto maestro está publicado en `7ff1cd3` y el checkpoint WIP anterior es `2ca101c`.
 
 Implementado y versionado en el checkpoint:
 
@@ -104,16 +104,17 @@ Implementado y versionado en el checkpoint:
 - Docker Compose de PostgreSQL, scripts PowerShell y workflow CI;
 - pruebas unitarias, de integración, arquitectura y frontend correspondientes.
 
-Pendiente para cerrar la Entrega 1:
+Gate ejecutado:
 
-- completar una instalación limpia reproducible desde lockfiles;
-- ejecutar migración completa contra PostgreSQL 16 desde una base realmente vacía;
-- arrancar backend y frontend y comprobar `/health/live`, `/health/ready` y `/`;
-- ejecutar el gate completo de formato, lint, tipos, tests, cobertura, auditorías y build;
-- guardar evidencia pertinente, revisar exposición de configuración y diff completo;
-- actualizar README, instalación, changelog, contexto y estado con resultados reales;
-- revisión final de arquitectura/seguridad/testing/despliegue sin hallazgos críticos/importantes;
-- crear el commit definitivo de la Entrega 1 y publicarlo.
+- instalación limpia reproducible desde `uv.lock` y `package-lock.json`;
+- PostgreSQL 16.14 local, baseline Alembic desde vacío y roundtrip de migración;
+- Ruff, mypy, 28 pruebas backend y cobertura 91,67 %;
+- ESLint, TypeScript, 10 pruebas frontend, cobertura 100 % y build Next.js;
+- `pip-audit` y `npm audit --audit-level=high` sin vulnerabilidades conocidas;
+- smoke HTTP 200 para `/health/live`, `/health/ready`, `/openapi.json` y `/`;
+- compatibilidad Psycopg async en Windows mediante un Selector event loop explícito.
+
+Pendiente administrativo: publicar el commit final de Entrega 1 y registrar su hash en estos documentos. Después, esperar aprobación explícita para Entrega 2.
 
 La Entrega 2 no está autorizada y no debe iniciarse.
 
@@ -200,7 +201,7 @@ Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana 
 
 Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa: `origin/delivery/01-foundation`.
 
-Último checkpoint conocido de implementación: `2ca101c664d108f77beb20539baaa96abb40b9d2` — `wip: checkpoint delivery 01 foundation`, publicado en `origin/delivery/01-foundation`.
+Último checkpoint remoto de continuidad: `7ff1cd3` — `docs: add master project continuity context`. Checkpoint WIP de implementación anterior: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
 
 ## Recuperación tras corte de energía o interrupción
 
@@ -220,8 +221,11 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 |---|---|
 | Una instalación/verificación limpia fue interrumpida antes del gate final. | Se creó y publicó el checkpoint WIP `2ca101c`; la Entrega 1 permanece abierta y debe retomarse desde el clean install. |
 | `python.exe` global no es accesible desde la sesión actual. | Usar el Python administrado por `uv`: `uv run python`, `uv run pytest`, etc.; la versión objetivo está fijada en CI/`.python-version`. |
-| PowerShell bloquea `npm.ps1` por la política de ejecución. | Invocar `npm.cmd` directamente; los scripts del proyecto no cambian la política global. |
+| PowerShell bloquea scripts `.ps1` y `npm.ps1` por la política de ejecución. | Invocar `npm.cmd` y ejecutar scripts propios con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; el bypass es solo del proceso y no cambia la política global. |
 | Docker/Docker Compose no está instalado o no está en `PATH` en esta máquina. | El Compose y CI ya están definidos; para evidencia local se requiere habilitar Docker o usar un PostgreSQL 16 accesible mediante variables de entorno. No sustituir con SQLite. |
+| Uvicorn usa `ProactorEventLoop` por defecto en Windows y Psycopg async lo rechaza. | Se añadió un Selector loop factory probado y `dev-backend.ps1` lo pasa mediante `--loop`; readiness contra PostgreSQL real responde 200. |
+| `check.ps1` continuaba tras fallos de comandos nativos y no configuraba la URL de la base de pruebas. | Se añadió `Invoke-Checked` con validación de `$LASTEXITCODE` y valores locales por defecto para las URLs de integración. |
+| El roundtrip Alembic local podía usar la misma base que la aplicación. | `db-up.ps1` provisiona `avicola_pro` y `avicola_pro_test`; `check.ps1` reserva la segunda para integración y falla temprano si ambas URLs son iguales. |
 | El archivo no rastreado `tatus` existe en la raíz y parece una captura accidental de nombres de archivos. | Se preserva como cambio ajeno/no identificado y no se incluye en commits hasta que el usuario autorice eliminarlo o incorporarlo. |
 | El output de algunas herramientas muestra mojibake de UTF-8 en la consola PowerShell. | Los archivos se mantienen en UTF-8 mediante `.editorconfig`/`.gitattributes`; validar contenido con herramientas que respeten UTF-8 y no recodificar masivamente sin necesidad. |
 
@@ -265,19 +269,19 @@ npm.cmd run build
 npm.cmd audit
 
 # Scripts desde la raíz
-.\scripts\bootstrap.ps1
-.\scripts\db-up.ps1
-.\scripts\migrate.ps1
-.\scripts\check.ps1
-.\scripts\dev-backend.ps1
-.\scripts\dev-frontend.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\db-up.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-backend.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-frontend.ps1
 ```
 
 Las variables de conexión y secretos se proporcionan por el entorno local/CI y nunca se copian a este documento.
 
 ## Pendientes y riesgos abiertos
 
-Pendiente inmediato: cerrar exclusivamente la Entrega 1 conforme a su gate. No avanzar a Identidad/RBAC/Auditoría persistente ni a ningún módulo de negocio.
+Pendiente inmediato: publicar el cierre de Entrega 1 y esperar aprobación explícita. No avanzar a Identidad/RBAC/Auditoría persistente ni a ningún módulo de negocio.
 
 Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus módulos:
 

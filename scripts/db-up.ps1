@@ -34,11 +34,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $env:PGPASSWORD = "local-test-password"
-& (Join-Path $pgBin "psql.exe") -h 127.0.0.1 -p $port -U avicola -d postgres -tAc "select 1 from pg_database where datname='avicola_pro'" | ForEach-Object { $databaseExists = $_.Trim() -eq "1" }
-if (-not $databaseExists) {
-    & (Join-Path $pgBin "createdb.exe") -h 127.0.0.1 -p $port -U avicola avicola_pro
-    if ($LASTEXITCODE -ne 0) { throw "createdb failed with exit code $LASTEXITCODE" }
+foreach ($databaseName in @("avicola_pro", "avicola_pro_test")) {
+    $databaseExists = $false
+    & (Join-Path $pgBin "psql.exe") -h 127.0.0.1 -p $port -U avicola -d postgres -tAc "select 1 from pg_database where datname='$databaseName'" | ForEach-Object { $databaseExists = $_.Trim() -eq "1" }
+    if (-not $databaseExists) {
+        & (Join-Path $pgBin "createdb.exe") -h 127.0.0.1 -p $port -U avicola $databaseName
+        if ($LASTEXITCODE -ne 0) { throw "createdb $databaseName failed with exit code $LASTEXITCODE" }
+    }
 }
 
-Write-Host "PostgreSQL 16 is ready on 127.0.0.1:$port."
-
+Write-Host "PostgreSQL 16 application and test databases are ready on 127.0.0.1:$port."

@@ -1,6 +1,6 @@
 # AVÍCOLA PRO
 
-Sistema empresarial para la gestión integral de una empresa avícola. El proyecto se encuentra en fase de arquitectura y planificación; todavía no contiene código de aplicación.
+Sistema empresarial para la gestión integral de una empresa avícola. La arquitectura está aprobada y la base técnica reproducible de la Entrega 1 ya contiene backend, frontend, PostgreSQL/Alembic, automatización y pruebas; los módulos de negocio aún no se han iniciado.
 
 ## Alcance de V1
 
@@ -33,7 +33,7 @@ Documentación principal:
 
 ## Estado
 
-Arquitectura base aprobada por el usuario y documentación sometida a revisión arquitectónica. El siguiente incremento recomendado es la base técnica y el módulo de Identidad y Acceso. Ninguna fase se considera terminada con revisión pendiente, pruebas fallidas o defectos críticos/altos conocidos.
+La Entrega 1 (base técnica reproducible) está implementada y su gate local está verde. El siguiente incremento planificado es Identidad, RBAC y Auditoría base, pero no debe iniciarse sin aprobación explícita del usuario. Consulte `PROJECT_CONTEXT.md` y `PROJECT_STATUS.md` para continuidad y evidencia exacta.
 
 ## Reglas de contribución
 

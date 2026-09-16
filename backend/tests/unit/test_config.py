@@ -52,6 +52,7 @@ def test_production_settings_reject_placeholder_credentials() -> None:
             environment=Environment.PRODUCTION,
             database_url="postgresql+psycopg://avicola:local-development-only@db/avicola",
             cors_origins=["https://avicola.example"],
+            log_format="json",
         )
 
 
@@ -62,6 +63,7 @@ def test_production_settings_reject_wildcard_cors() -> None:
             environment=Environment.PRODUCTION,
             database_url=VALID_DATABASE_URL,
             cors_origins=["*"],
+            log_format="json",
         )
 
 

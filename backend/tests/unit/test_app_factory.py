@@ -1,7 +1,8 @@
-from avicola_pro.bootstrap.app import create_app
-from avicola_pro.shared.infrastructure.config import Settings
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+from avicola_pro.bootstrap.app import create_app
+from avicola_pro.shared.infrastructure.config import Settings
 
 VALID_DATABASE_URL = "postgresql+psycopg://avicola:local-password@127.0.0.1:5432/avicola_pro"
 
