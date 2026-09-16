@@ -2,7 +2,7 @@
 
 ## Última actualización
 
-2026-09-16 — Entrega 1 en progreso; checkpoint de la base técnica reproducible.
+2026-09-16 — Entrega 1 en progreso; contexto maestro de continuidad creado y checkpoint remoto verificado.
 
 ## Estado global
 
@@ -10,6 +10,10 @@
 frontend, PostgreSQL, migraciones, automatización y calidad está creada, pero la entrega
 no está cerrada: falta completar la instalación limpia interrumpida, los smoke tests y
 la revisión final antes del commit definitivo.
+
+Fuente maestra de continuidad: `PROJECT_CONTEXT.md`. Debe actualizarse junto con este
+archivo después de cada entrega importante y antes de terminar una sesión; luego se debe
+crear commit y hacer push sin incluir secretos.
 
 ## Completado
 
@@ -23,6 +27,7 @@ la revisión final antes del commit definitivo.
 - [x] Estrategia de pruebas y gates.
 - [x] Plan incremental de entregas.
 - [x] Estrategia de backups y restauración.
+- [x] Contexto maestro de continuidad consolidado en `PROJECT_CONTEXT.md`.
 - [x] Primera revisión arquitectónica independiente y corrección de hallazgos.
 - [x] Segunda/tercera revisión arquitectónica sin hallazgos críticos/altos (architect reviewer, 2026-09-16).
 - [ ] Base técnica (Entrega 1 en progreso; checkpoint WIP creado antes de la verificación final).
@@ -46,8 +51,9 @@ la revisión final antes del commit definitivo.
 **Completar Entrega 1: Base técnica reproducible**, seguida —solo con aprobación explícita— de
 **Entrega 2: Identidad, RBAC y Auditoría base**.
 
-La Entrega 1 fue aprobada y está en desarrollo en `delivery/01-foundation`. No iniciar la
-Entrega 2 sin aprobación explícita del usuario.
+La Entrega 1 fue aprobada y está en desarrollo en `delivery/01-foundation`. El último
+checkpoint de implementación conocido es `2ca101c` y está publicado en
+`origin/delivery/01-foundation`. No iniciar la Entrega 2 sin aprobación explícita del usuario.
 
 Evidencia documental actual: los nueve archivos requeridos, verificación local de enlaces/whitespace/placeholders y tercera revisión arquitectónica independiente sin hallazgos Critical/Important. Los artefactos automatizados bajo `artifacts/quality/` comenzarán con la Entrega 1.
 
@@ -77,8 +83,8 @@ Ninguno de estos riesgos impide construir la base técnica o Identidad; deben re
 
 Una sesión futura debe leer, en orden:
 
-1. `README.md` y `PROJECT_STATUS.md`.
-2. `ARCHITECTURE.md` y sus ADR.
+1. `PROJECT_CONTEXT.md` y `PROJECT_STATUS.md`.
+2. `README.md`, `ARCHITECTURE.md` y sus ADR.
 3. `DATABASE.md` y `SECURITY.md`.
 4. `TESTING_STRATEGY.md` e `INSTALLATION.md`.
 5. La entrega correspondiente de `IMPLEMENTATION_PLAN.md`.
