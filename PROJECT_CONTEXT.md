@@ -90,7 +90,7 @@ V1 es para **una sola empresa**. `company_profile` es singleton; no existe aisla
 
 ## Estado exacto de la Entrega 1
 
-Estado al 2026-09-16: **completada y revalidada**. Rama activa `delivery/01-foundation`; el checkpoint publicado anterior es `2fb0aa4` y existe un bloque final de endurecimiento verificado pendiente de commit/push.
+Estado al 2026-09-16: **completada, revalidada y respaldada**. Rama activa `delivery/01-foundation`; checkpoint técnico publicado `ee294d6` (`fix: harden delivery 1 foundation checks`).
 
 Implementado y versionado en el checkpoint:
 
@@ -205,7 +205,7 @@ Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana 
 
 Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa: `origin/delivery/01-foundation`.
 
-Último checkpoint remoto de implementación: `b276cfb` — `build: establish reproducible application foundation`. Contexto maestro inicial: `7ff1cd3`. Checkpoint WIP anterior: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
+Último checkpoint remoto técnico: `ee294d6` — `fix: harden delivery 1 foundation checks`. Cierre previo: `2fb0aa4`; implementación inicial: `b276cfb`; checkpoint WIP: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
 
 ## Recuperación tras corte de energía o interrupción
 

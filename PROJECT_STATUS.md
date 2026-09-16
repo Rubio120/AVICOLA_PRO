@@ -51,9 +51,9 @@ crear commit y hacer push sin incluir secretos.
 **Esperar aprobación explícita del usuario** antes de iniciar la **Entrega 2: Identidad,
 RBAC y Auditoría base**.
 
-La Entrega 1 tiene como último checkpoint publicado `2fb0aa4` en
-`origin/delivery/01-foundation`. El bloque final de endurecimiento descrito abajo está
-verificado localmente y pendiente de commit/push. No iniciar la Entrega 2 sin aprobación explícita del usuario.
+La Entrega 1 tiene como último checkpoint técnico publicado `ee294d6`
+(`fix: harden delivery 1 foundation checks`) en `origin/delivery/01-foundation`.
+No iniciar la Entrega 2 sin aprobación explícita del usuario.
 
 Evidencia local fresca del 2026-09-16:
 
@@ -64,11 +64,11 @@ Evidencia local fresca del 2026-09-16:
 - dependencias: `pip-audit` y `npm audit --audit-level=high`, cero vulnerabilidades conocidas;
 - smoke: `/health/live`, `/health/ready`, `/openapi.json` y `/` respondieron HTTP 200.
 
-El bloque local verificado de revisión final corrige portabilidad Alembic en Linux, validación de
+El bloque publicado de revisión final corrige portabilidad Alembic en Linux, validación de
 URL PostgreSQL productiva, matriz/ciclos de dependencias hexagonales, correlación de logs
 y whitespace histórico. La revisión no dejó hallazgos críticos/importantes de código pendientes.
 
-Evidencia documental actual: documentos de arquitectura y continuidad, verificación local de enlaces/whitespace/placeholders y revisión independiente. La evidencia local de Entrega 1 se resume arriba; GitHub Actions conservará los artefactos CI después del próximo push. `artifacts/quality/` mantiene por ahora solo su marcador versionado.
+Evidencia documental actual: documentos de arquitectura y continuidad, verificación local de enlaces/whitespace/placeholders y revisión independiente. La evidencia local de Entrega 1 se resume arriba; GitHub Actions procesa el commit publicado. `artifacts/quality/` mantiene por ahora solo su marcador versionado.
 
 ## Especialistas disponibles
 
