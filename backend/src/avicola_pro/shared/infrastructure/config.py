@@ -6,6 +6,7 @@ from typing import Any, Self
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Environment(StrEnum):
@@ -70,6 +71,11 @@ class Settings(BaseSettings):
         if "*" in self.cors_origins:
             raise ValueError("wildcard CORS origin is forbidden in staging and production")
         database_value = self.database_url.get_secret_value().lower()
+        database_url = make_url(database_value)
+        if not all((database_url.host, database_url.database, database_url.username, database_url.password)):
+            raise ValueError(
+                "database_url must include host, database, username, and password in staging and production"
+            )
         insecure_markers = ("local-development-only", "placeholder", "changeme")
         if any(marker in database_value for marker in insecure_markers):
             raise ValueError("placeholder database credentials are forbidden in staging and production")

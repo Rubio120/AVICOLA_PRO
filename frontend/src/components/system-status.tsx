@@ -10,4 +10,3 @@ export function SystemStatus({ available }: SystemStatusProps) {
     </div>
   );
 }
-

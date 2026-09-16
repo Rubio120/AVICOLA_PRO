@@ -42,3 +42,8 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 - El gate local configura la base PostgreSQL de integración preparada por los scripts.
 - Las pruebas de configuración validan de forma aislada credenciales placeholder y CORS wildcard.
 - El lint frontend ya no emite advertencias por exportación anónima.
+- Alembic se ejecuta desde el intérprete Python activo para funcionar en Windows y Linux CI.
+- La validación de producción rechaza URLs PostgreSQL incompletas.
+- Las pruebas arquitectónicas detectan dependencias inversas y ciclos internos.
+- Los logs estructurados reciben correlation ID y registran errores inesperados sin exponer mensajes sensibles.
+- Se normalizó el final de archivo para que el gate histórico de whitespace quede limpio.

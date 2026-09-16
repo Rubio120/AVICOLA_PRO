@@ -6,6 +6,7 @@ from contextvars import ContextVar
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from structlog.contextvars import bind_contextvars, reset_contextvars
 
 CORRELATION_HEADER = "X-Correlation-ID"
 MAX_CORRELATION_ID_LENGTH = 64
@@ -31,10 +32,12 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         correlation_id = _resolve_correlation_id(request.headers.get(CORRELATION_HEADER))
         token = correlation_id_context.set(correlation_id)
+        logging_tokens = bind_contextvars(correlation_id=correlation_id)
         request.state.correlation_id = correlation_id
         try:
             response = await call_next(request)
             response.headers[CORRELATION_HEADER] = correlation_id
             return response
         finally:
+            reset_contextvars(**logging_tokens)
             correlation_id_context.reset(token)

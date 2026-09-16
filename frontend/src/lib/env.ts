@@ -14,4 +14,3 @@ export function parseServerEnv(environment: Record<string, string | undefined>):
 export function getServerEnv(): ServerEnv {
   return parseServerEnv({ BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL });
 }
-

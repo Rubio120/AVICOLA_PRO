@@ -90,7 +90,7 @@ V1 es para **una sola empresa**. `company_profile` es singleton; no existe aisla
 
 ## Estado exacto de la Entrega 1
 
-Estado al 2026-09-16: **completada, verificada y publicada**. Rama activa `delivery/01-foundation`; commit final `b276cfb` (`build: establish reproducible application foundation`).
+Estado al 2026-09-16: **completada y revalidada**. Rama activa `delivery/01-foundation`; el checkpoint publicado anterior es `2fb0aa4` y existe un bloque final de endurecimiento verificado pendiente de commit/push.
 
 Implementado y versionado en el checkpoint:
 
@@ -108,11 +108,15 @@ Gate ejecutado:
 
 - instalación limpia reproducible desde `uv.lock` y `package-lock.json`;
 - PostgreSQL 16.14 local, baseline Alembic desde vacío y roundtrip de migración;
-- Ruff, mypy, 28 pruebas backend y cobertura 91,67 %;
+- Ruff, mypy, 36 pruebas backend y cobertura 92,09 %;
 - ESLint, TypeScript, 10 pruebas frontend, cobertura 100 % y build Next.js;
 - `pip-audit` y `npm audit --audit-level=high` sin vulnerabilidades conocidas;
 - smoke HTTP 200 para `/health/live`, `/health/ready`, `/openapi.json` y `/`;
 - compatibilidad Psycopg async en Windows mediante un Selector event loop explícito.
+- Alembic invocado de forma multiplataforma mediante el intérprete activo;
+- reglas hexagonales completas por capa y detección automática de ciclos;
+- URL PostgreSQL de staging/producción obligatoriamente completa;
+- correlation ID enlazado al contexto estructurado y errores inesperados registrados sin filtrar su mensaje.
 
 Pendiente: esperar aprobación explícita para Entrega 2. No existe trabajo autorizado posterior a Entrega 1.
 
@@ -226,6 +230,10 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 | Uvicorn usa `ProactorEventLoop` por defecto en Windows y Psycopg async lo rechaza. | Se añadió un Selector loop factory probado y `dev-backend.ps1` lo pasa mediante `--loop`; readiness contra PostgreSQL real responde 200. |
 | `check.ps1` continuaba tras fallos de comandos nativos y no configuraba la URL de la base de pruebas. | Se añadió `Invoke-Checked` con validación de `$LASTEXITCODE` y valores locales por defecto para las URLs de integración. |
 | El roundtrip Alembic local podía usar la misma base que la aplicación. | `db-up.ps1` provisiona `avicola_pro` y `avicola_pro_test`; `check.ps1` reserva la segunda para integración y falla temprano si ambas URLs son iguales. |
+| La prueba Alembic usaba la ruta Windows `.venv/Scripts/alembic.exe`. | Ahora usa `sys.executable -m alembic`, compatible con Windows y Linux CI. |
+| Las reglas arquitectónicas no cubrían imports inversos dentro del módulo ni ciclos. | Se añadió matriz de dependencias por capa, restricciones intermodulares y detección DFS de ciclos con fixtures negativos. |
+| Producción aceptaba URLs PostgreSQL sin host, base, usuario o contraseña. | La URL se parsea con SQLAlchemy y staging/producción exigen las cuatro coordenadas. |
+| Correlation ID no estaba enlazado a Structlog y los 500 no producían evento seguro. | Middleware enlaza/restaura contextvars y el handler registra tipo, ruta y correlación sin mensaje sensible. |
 | El archivo no rastreado `tatus` existe en la raíz y parece una captura accidental de nombres de archivos. | Se preserva como cambio ajeno/no identificado y no se incluye en commits hasta que el usuario autorice eliminarlo o incorporarlo. |
 | El output de algunas herramientas muestra mojibake de UTF-8 en la consola PowerShell. | Los archivos se mantienen en UTF-8 mediante `.editorconfig`/`.gitattributes`; validar contenido con herramientas que respeten UTF-8 y no recodificar masivamente sin necesidad. |
 

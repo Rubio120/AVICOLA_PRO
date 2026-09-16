@@ -18,4 +18,3 @@ describe("SystemStatus", () => {
     expect(screen.queryByText(/postgresql:\/\//i)).not.toBeInTheDocument();
   });
 });
-

@@ -2,7 +2,7 @@
 
 ## Última actualización
 
-2026-09-16 — Entrega 1 implementada y con gate local verde; pendiente de aprobación para iniciar Entrega 2.
+2026-09-16 — Entrega 1 revalidada y endurecida; gate local completo verde, pendiente de aprobación para iniciar Entrega 2.
 
 ## Estado global
 
@@ -51,20 +51,24 @@ crear commit y hacer push sin incluir secretos.
 **Esperar aprobación explícita del usuario** antes de iniciar la **Entrega 2: Identidad,
 RBAC y Auditoría base**.
 
-La Entrega 1 se completó en `delivery/01-foundation` y su commit final
-`b276cfb` (`build: establish reproducible application foundation`) está publicado en
-`origin/delivery/01-foundation`. No iniciar la Entrega 2 sin aprobación explícita del usuario.
+La Entrega 1 tiene como último checkpoint publicado `2fb0aa4` en
+`origin/delivery/01-foundation`. El bloque final de endurecimiento descrito abajo está
+verificado localmente y pendiente de commit/push. No iniciar la Entrega 2 sin aprobación explícita del usuario.
 
 Evidencia local fresca del 2026-09-16:
 
 - clean install: CPython 3.13.15/79 paquetes y npm/471 paquetes desde lockfiles;
 - Alembic: base vacía a `0001_baseline (head)` y roundtrip validado;
-- backend: Ruff y mypy verdes; 28 pruebas, cobertura 91,67 %;
+- backend: Ruff y mypy verdes; 36 pruebas, cobertura 92,09 %;
 - frontend: ESLint y TypeScript verdes; 10 pruebas, cobertura 100 %; build Next.js verde;
 - dependencias: `pip-audit` y `npm audit --audit-level=high`, cero vulnerabilidades conocidas;
 - smoke: `/health/live`, `/health/ready`, `/openapi.json` y `/` respondieron HTTP 200.
 
-Evidencia documental actual: documentos de arquitectura y continuidad, verificación local de enlaces/whitespace/placeholders y revisión independiente. La evidencia local de Entrega 1 se resume arriba; GitHub Actions conservará los artefactos CI cuando ejecute el commit publicado. `artifacts/quality/` mantiene por ahora solo su marcador versionado.
+El bloque local verificado de revisión final corrige portabilidad Alembic en Linux, validación de
+URL PostgreSQL productiva, matriz/ciclos de dependencias hexagonales, correlación de logs
+y whitespace histórico. La revisión no dejó hallazgos críticos/importantes de código pendientes.
+
+Evidencia documental actual: documentos de arquitectura y continuidad, verificación local de enlaces/whitespace/placeholders y revisión independiente. La evidencia local de Entrega 1 se resume arriba; GitHub Actions conservará los artefactos CI después del próximo push. `artifacts/quality/` mantiene por ahora solo su marcador versionado.
 
 ## Especialistas disponibles
 

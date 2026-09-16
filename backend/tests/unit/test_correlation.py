@@ -4,6 +4,7 @@ import asyncio
 import uuid
 
 import pytest
+import structlog.contextvars
 from httpx import ASGITransport, AsyncClient
 
 from avicola_pro.bootstrap.app import create_app
@@ -26,10 +27,15 @@ async def test_correlation_id_is_generated_and_returned() -> None:
 async def test_valid_correlation_id_is_propagated() -> None:
     app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
 
+    @app.get("/correlation-context")
+    async def correlation_context() -> dict[str, object]:
+        return structlog.contextvars.get_contextvars()
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/health/live", headers={"X-Correlation-ID": "request-123"})
+        response = await client.get("/correlation-context", headers={"X-Correlation-ID": "request-123"})
 
     assert response.headers["X-Correlation-ID"] == "request-123"
+    assert response.json()["correlation_id"] == "request-123"
 
 
 @pytest.mark.asyncio

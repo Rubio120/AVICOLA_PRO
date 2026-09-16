@@ -23,4 +23,3 @@ export async function getBackendHealth(baseUrl: string): Promise<BackendHealth> 
     return { available: false };
   }
 }
-

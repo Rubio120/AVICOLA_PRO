@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import psycopg
@@ -22,7 +23,7 @@ def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["AVICOLA_DATABASE_URL"] = _database_url()
     return subprocess.run(
-        [str(BACKEND_ROOT / ".venv" / "Scripts" / "alembic.exe"), *args],
+        [sys.executable, "-m", "alembic", *args],
         cwd=BACKEND_ROOT,
         env=environment,
         check=True,

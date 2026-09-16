@@ -17,4 +17,3 @@ foreach ($target in $targets) {
 }
 
 & (Join-Path $PSScriptRoot "bootstrap.ps1")
-

@@ -12,4 +12,3 @@ try {
 finally {
     Pop-Location
 }
-

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
 from avicola_pro.bootstrap.app import create_app
+from avicola_pro.shared.api import error_handlers
 from avicola_pro.shared.api.errors import ConflictError
 from avicola_pro.shared.infrastructure.config import Settings
 
@@ -80,6 +83,24 @@ async def test_unhandled_error_does_not_leak_details_or_traceback() -> None:
     assert response.json()["detail"] == "An unexpected error occurred"
     assert "secret-value" not in rendered
     assert "traceback" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_unhandled_error_is_logged_without_exception_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = Mock()
+    monkeypatch.setattr(error_handlers, "logger", logger)
+    transport = ASGITransport(app=build_test_app(), raise_app_exceptions=False)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/crash", headers={"X-Correlation-ID": "error-request"})
+
+    logger.error.assert_called_once_with(
+        "unhandled_request_error",
+        correlation_id="error-request",
+        exception_type="ValueError",
+        path="/crash",
+    )
+    assert "secret-value" not in repr(logger.error.call_args)
 
 
 @pytest.mark.asyncio

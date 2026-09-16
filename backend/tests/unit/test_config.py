@@ -78,6 +78,26 @@ def test_production_settings_require_json_logs() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql+psycopg://avicola:password@db-host",
+        "postgresql+psycopg://:password@db-host/avicola",
+        "postgresql+psycopg://avicola@db-host/avicola",
+        "postgresql+psycopg:///avicola",
+    ],
+)
+def test_production_settings_require_complete_database_coordinates(database_url: str) -> None:
+    with pytest.raises(ValidationError, match="host, database, username, and password"):
+        Settings(
+            _env_file=None,
+            environment=Environment.PRODUCTION,
+            database_url=database_url,
+            cors_origins=["https://avicola.example"],
+            log_format="json",
+        )
+
+
 def test_database_credentials_are_redacted_from_repr() -> None:
     settings = Settings(_env_file=None, database_url=VALID_DATABASE_URL)
 

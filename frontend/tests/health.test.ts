@@ -32,4 +32,3 @@ describe("getBackendHealth", () => {
     await expect(getBackendHealth("http://backend:8000")).resolves.toEqual({ available: false });
   });
 });
-
