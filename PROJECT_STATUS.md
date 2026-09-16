@@ -51,9 +51,9 @@ crear commit y hacer push sin incluir secretos.
 **Esperar aprobación explícita del usuario** antes de iniciar la **Entrega 2: Identidad,
 RBAC y Auditoría base**.
 
-La Entrega 1 se completó en `delivery/01-foundation`. El contexto maestro fue publicado en
-`7ff1cd3`; el hash del commit final de Entrega 1 debe consultarse en `git log` después del
-push de cierre. No iniciar la Entrega 2 sin aprobación explícita del usuario.
+La Entrega 1 se completó en `delivery/01-foundation` y su commit final
+`b276cfb` (`build: establish reproducible application foundation`) está publicado en
+`origin/delivery/01-foundation`. No iniciar la Entrega 2 sin aprobación explícita del usuario.
 
 Evidencia local fresca del 2026-09-16:
 

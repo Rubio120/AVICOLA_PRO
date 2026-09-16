@@ -90,7 +90,7 @@ V1 es para **una sola empresa**. `company_profile` es singleton; no existe aisla
 
 ## Estado exacto de la Entrega 1
 
-Estado al 2026-09-16: **implementada y con gate local verde**. Rama activa `delivery/01-foundation`; el contexto maestro está publicado en `7ff1cd3` y el checkpoint WIP anterior es `2ca101c`.
+Estado al 2026-09-16: **completada, verificada y publicada**. Rama activa `delivery/01-foundation`; commit final `b276cfb` (`build: establish reproducible application foundation`).
 
 Implementado y versionado en el checkpoint:
 
@@ -114,7 +114,7 @@ Gate ejecutado:
 - smoke HTTP 200 para `/health/live`, `/health/ready`, `/openapi.json` y `/`;
 - compatibilidad Psycopg async en Windows mediante un Selector event loop explícito.
 
-Pendiente administrativo: publicar el commit final de Entrega 1 y registrar su hash en estos documentos. Después, esperar aprobación explícita para Entrega 2.
+Pendiente: esperar aprobación explícita para Entrega 2. No existe trabajo autorizado posterior a Entrega 1.
 
 La Entrega 2 no está autorizada y no debe iniciarse.
 
@@ -201,7 +201,7 @@ Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana 
 
 Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa: `origin/delivery/01-foundation`.
 
-Último checkpoint remoto de continuidad: `7ff1cd3` — `docs: add master project continuity context`. Checkpoint WIP de implementación anterior: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
+Último checkpoint remoto de implementación: `b276cfb` — `build: establish reproducible application foundation`. Contexto maestro inicial: `7ff1cd3`. Checkpoint WIP anterior: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
 
 ## Recuperación tras corte de energía o interrupción
 
@@ -219,7 +219,7 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 
 | Problema observado | Estado/solución aplicada |
 |---|---|
-| Una instalación/verificación limpia fue interrumpida antes del gate final. | Se creó y publicó el checkpoint WIP `2ca101c`; la Entrega 1 permanece abierta y debe retomarse desde el clean install. |
+| Una instalación/verificación limpia fue interrumpida antes del gate final. | Se creó y publicó el checkpoint WIP `2ca101c`; posteriormente el clean install y el gate se completaron en `b276cfb`. |
 | `python.exe` global no es accesible desde la sesión actual. | Usar el Python administrado por `uv`: `uv run python`, `uv run pytest`, etc.; la versión objetivo está fijada en CI/`.python-version`. |
 | PowerShell bloquea scripts `.ps1` y `npm.ps1` por la política de ejecución. | Invocar `npm.cmd` y ejecutar scripts propios con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; el bypass es solo del proceso y no cambia la política global. |
 | Docker/Docker Compose no está instalado o no está en `PATH` en esta máquina. | El Compose y CI ya están definidos; para evidencia local se requiere habilitar Docker o usar un PostgreSQL 16 accesible mediante variables de entorno. No sustituir con SQLite. |
@@ -281,7 +281,7 @@ Las variables de conexión y secretos se proporcionan por el entorno local/CI y 
 
 ## Pendientes y riesgos abiertos
 
-Pendiente inmediato: publicar el cierre de Entrega 1 y esperar aprobación explícita. No avanzar a Identidad/RBAC/Auditoría persistente ni a ningún módulo de negocio.
+Pendiente inmediato: esperar aprobación explícita. No avanzar a Identidad/RBAC/Auditoría persistente ni a ningún módulo de negocio.
 
 Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus módulos:
 
