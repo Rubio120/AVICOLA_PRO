@@ -1,7 +1,8 @@
 # Entrega 2 — Diseño de Identidad, RBAC y Auditoría
 
-**Fecha:** 2026-09-17  
-**Estado:** aprobado  
+**Fecha:** 2026-09-17
+
+**Estado:** aprobado
 **Alcance:** exclusivamente Entrega 2
 
 ## Objetivo
