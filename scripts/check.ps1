@@ -10,7 +10,7 @@ if (-not $env:AVICOLA_TEST_DATABASE_URL) {
     $env:AVICOLA_TEST_DATABASE_URL = "postgresql+psycopg://avicola:local-test-password@127.0.0.1:55432/avicola_pro_test"
 }
 if (-not $env:AVICOLA_SESSION_HMAC_KEY) {
-    $env:AVICOLA_SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+    $env:AVICOLA_SESSION_HMAC_KEY = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
 }
 if ($env:AVICOLA_TEST_DATABASE_URL -eq $env:AVICOLA_DATABASE_URL) {
     throw "AVICOLA_TEST_DATABASE_URL must use a dedicated database, separate from AVICOLA_DATABASE_URL"

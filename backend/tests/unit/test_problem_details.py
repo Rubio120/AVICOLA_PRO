@@ -13,7 +13,7 @@ from avicola_pro.shared.api.errors import ConflictError
 from avicola_pro.shared.infrastructure.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://avicola:password@127.0.0.1:5432/avicola_pro"
-SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+SESSION_HMAC_KEY = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
 
 
 class SamplePayload(BaseModel):

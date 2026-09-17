@@ -5,7 +5,7 @@ from avicola_pro.bootstrap.app import create_app
 from avicola_pro.shared.infrastructure.config import Settings
 
 VALID_DATABASE_URL = "postgresql+psycopg://avicola:local-password@127.0.0.1:5432/avicola_pro"
-VALID_SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+VALID_SESSION_HMAC_KEY = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
 
 
 def test_app_factory_creates_isolated_application_instances() -> None:

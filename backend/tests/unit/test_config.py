@@ -6,8 +6,9 @@ from pydantic import ValidationError
 from avicola_pro.shared.infrastructure.config import Environment, Settings
 
 VALID_DATABASE_URL = "postgresql+psycopg://avicola:local-password@127.0.0.1:5432/avicola_pro"
-VALID_SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
-LOCAL_DEVELOPMENT_HMAC_KEY = "bG9jYWwtZGV2ZWxvcG1lbnQtb25seS1zZXNzaW9uLWhtYWMta2V5"
+# Fixed pseudo-random bytes for tests only; never use this value as a production secret.
+VALID_SESSION_HMAC_KEY = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
+LOCAL_DEVELOPMENT_HMAC_KEY = "3ZD3Evyn0jNcray1baXMzLTysArzXFrRSjRsNHN0N_o"
 
 
 def test_local_settings_accept_postgresql_and_apply_business_defaults() -> None:
@@ -94,11 +95,13 @@ def test_nonlocal_settings_require_a_strong_nonplaceholder_hmac_key_and_secure_c
         "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE",
         "not.a.valid.base64url.hmac.key................",
         "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQg",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "AAECAwQFBgcICQoLDA0ODwABAgMEBQYHCAkKCwwNDg8",
     ],
-    ids=["repeated-bytes", "invalid-format", "decoded-key-too-short"],
+    ids=["repeated-bytes", "invalid-format", "decoded-key-too-short", "ascending-sequence", "short-cycle"],
 )
-def test_nonlocal_settings_reject_hmac_keys_without_32_random_decoded_bytes(session_hmac_key: str) -> None:
-    """A non-random, malformed, or short decoded HMAC key allows predictable session signatures."""
+def test_nonlocal_settings_reject_hmac_keys_with_known_weak_decoded_patterns(session_hmac_key: str) -> None:
+    """Malformed, short, or known weak byte patterns make session signatures predictable."""
     with pytest.raises(ValidationError, match="session_hmac_key"):
         Settings(
             _env_file=None,
