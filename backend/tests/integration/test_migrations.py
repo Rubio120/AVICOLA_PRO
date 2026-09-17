@@ -319,3 +319,37 @@ def test_event_payloads_reject_keys_outside_allowlist(statement: str) -> None:
         pytest.raises(errors.CheckViolation),
     ):
         cursor.execute(statement, (uuid4(), uuid4()))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "statement",
+    [
+        """
+        insert into audit_events (id, action, resource_type, outcome, correlation_id, after_data)
+        values (
+            %s, 'users.update', 'user', 'FAILURE', %s,
+            '{"username": {"password": "sensitive"}}'::jsonb
+        )
+        """,
+        """
+        insert into audit_events (id, action, resource_type, outcome, correlation_id, before_data)
+        values (%s, 'roles.update', 'role', 'FAILURE', %s, '{"role_id": ["first", "second"]}'::jsonb)
+        """,
+        """
+        insert into security_events (id, event_type, outcome, correlation_id, metadata)
+        values (%s, 'login.failed', 'FAILURE', %s, '{"reason": {"token": "sensitive"}}'::jsonb)
+        """,
+        """
+        insert into security_events (id, event_type, outcome, correlation_id, metadata)
+        values (%s, 'authorization.denied', 'DENIED', %s, '{"resource_id": ["first", "second"]}'::jsonb)
+        """,
+    ],
+)
+def test_event_payloads_reject_objects_and_arrays_under_allowlisted_keys(statement: str) -> None:
+    with (
+        psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection,
+        db_connection.cursor() as cursor,
+        pytest.raises(errors.CheckViolation),
+    ):
+        cursor.execute(statement, (uuid4(), uuid4()))

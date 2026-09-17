@@ -7,7 +7,7 @@ Create Date: 2026-09-17
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -58,6 +58,53 @@ _ROLES = (
     ("finance", "Finanzas"),
     ("auditor", "Auditor"),
 )
+_NULLABLE_STRING = ("string", "null")
+_NULLABLE_NUMBER = ("number", "null")
+_NULLABLE_BOOLEAN = ("boolean", "null")
+_AUDIT_SNAPSHOT_SHAPE = {
+    "username": _NULLABLE_STRING,
+    "email": _NULLABLE_STRING,
+    "display_name": _NULLABLE_STRING,
+    "status": _NULLABLE_STRING,
+    "must_change_password": _NULLABLE_BOOLEAN,
+    "locked_until": _NULLABLE_STRING,
+    "token_version": _NULLABLE_NUMBER,
+    "code": _NULLABLE_STRING,
+    "name": _NULLABLE_STRING,
+    "description": _NULLABLE_STRING,
+    "is_system": _NULLABLE_BOOLEAN,
+    "is_active": _NULLABLE_BOOLEAN,
+    "user_id": _NULLABLE_STRING,
+    "role_id": _NULLABLE_STRING,
+    "permission_id": _NULLABLE_STRING,
+    "permission_key": _NULLABLE_STRING,
+}
+_SECURITY_METADATA_SHAPE = {
+    "username": _NULLABLE_STRING,
+    "user_id": _NULLABLE_STRING,
+    "session_id": _NULLABLE_STRING,
+    "session_family_id": _NULLABLE_STRING,
+    "reason": _NULLABLE_STRING,
+    "permission": _NULLABLE_STRING,
+    "resource_type": _NULLABLE_STRING,
+    "resource_id": _NULLABLE_STRING,
+    "failed_attempts": _NULLABLE_NUMBER,
+    "locked_until": _NULLABLE_STRING,
+    "token_version": _NULLABLE_NUMBER,
+}
+
+
+def _jsonb_key_array_sql(shape: Mapping[str, tuple[str, ...]]) -> str:
+    quoted_keys = ", ".join(f"'{key}'" for key in shape)
+    return f"array[{quoted_keys}]::text[]"
+
+
+def _jsonb_scalar_shape_sql(column: str, shape: Mapping[str, tuple[str, ...]]) -> str:
+    clauses = []
+    for key, allowed_types in shape.items():
+        quoted_types = ", ".join(f"'{value_type}'" for value_type in allowed_types)
+        clauses.append(f"({column} -> '{key}' is null or jsonb_typeof({column} -> '{key}') in ({quoted_types}))")
+    return " and ".join(clauses)
 
 
 def _create_identity_tables() -> None:
@@ -197,11 +244,6 @@ def _create_identity_tables() -> None:
 
 
 def _create_event_tables() -> None:
-    audit_keys = """array['username','email','display_name','status','must_change_password','locked_until',
-        'token_version','code','name','description','is_system','is_active','user_id','role_id',
-        'permission_id','permission_key']::text[]"""
-    security_keys = """array['username','user_id','session_id','session_family_id','reason','permission',
-        'resource_type','resource_id','failed_attempts','locked_until','token_version']::text[]"""
     op.create_table(
         "audit_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -219,15 +261,23 @@ def _create_event_tables() -> None:
         sa.Column("after_data", postgresql.JSONB(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.CheckConstraint(
-            f"after_data is null or after_data - {audit_keys} = '{{}}'::jsonb",
+            f"after_data is null or after_data - {_jsonb_key_array_sql(_AUDIT_SNAPSHOT_SHAPE)} = '{{}}'::jsonb",
             name="after_data_allowlist",
         ),
         sa.CheckConstraint("after_data is null or jsonb_typeof(after_data) = 'object'", name="after_data_object"),
         sa.CheckConstraint(
-            f"before_data is null or before_data - {audit_keys} = '{{}}'::jsonb",
+            f"before_data is null or before_data - {_jsonb_key_array_sql(_AUDIT_SNAPSHOT_SHAPE)} = '{{}}'::jsonb",
             name="before_data_allowlist",
         ),
         sa.CheckConstraint("before_data is null or jsonb_typeof(before_data) = 'object'", name="before_data_object"),
+        sa.CheckConstraint(
+            f"before_data is null or ({_jsonb_scalar_shape_sql('before_data', _AUDIT_SNAPSHOT_SHAPE)})",
+            name="before_data_scalar_shape",
+        ),
+        sa.CheckConstraint(
+            f"after_data is null or ({_jsonb_scalar_shape_sql('after_data', _AUDIT_SNAPSHOT_SHAPE)})",
+            name="after_data_scalar_shape",
+        ),
         sa.CheckConstraint("outcome in ('SUCCESS', 'FAILURE')", name="outcome_valid"),
         sa.ForeignKeyConstraint(
             ["actor_user_id"], ["users.id"], name="fk_audit_events_actor_user_id_users", ondelete="RESTRICT"
@@ -254,8 +304,15 @@ def _create_event_tables() -> None:
         sa.Column("user_agent", sa.String(length=512), nullable=True),
         sa.Column("metadata", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint(f"metadata - {security_keys} = '{{}}'::jsonb", name="metadata_allowlist"),
+        sa.CheckConstraint(
+            f"metadata - {_jsonb_key_array_sql(_SECURITY_METADATA_SHAPE)} = '{{}}'::jsonb",
+            name="metadata_allowlist",
+        ),
         sa.CheckConstraint("jsonb_typeof(metadata) = 'object'", name="metadata_object"),
+        sa.CheckConstraint(
+            _jsonb_scalar_shape_sql("metadata", _SECURITY_METADATA_SHAPE),
+            name="metadata_scalar_shape",
+        ),
         sa.CheckConstraint("outcome in ('SUCCESS', 'FAILURE', 'DENIED')", name="outcome_valid"),
         sa.ForeignKeyConstraint(
             ["actor_user_id"], ["users.id"], name="fk_security_events_actor_user_id_users", ondelete="RESTRICT"
