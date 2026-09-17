@@ -20,6 +20,9 @@ dependencies = [
   "uvicorn[standard]>=0.53,<1",
 ]
 
+[project.scripts]
+avicola-pro = "avicola_pro.cli:app"
+
 [dependency-groups]
 dev = [
   "asgi-lifespan>=2.1,<3",

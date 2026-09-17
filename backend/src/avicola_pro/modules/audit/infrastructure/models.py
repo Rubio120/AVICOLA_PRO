@@ -102,8 +102,8 @@ class AuditEvent(Base):
     correlation_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
     ip_address: Mapped[str | None] = mapped_column(INET)
     user_agent: Mapped[str | None] = mapped_column(String(512))
-    before_data: Mapped[dict[str, object] | None] = mapped_column(JSONB)
-    after_data: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    before_data: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
+    after_data: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
 
