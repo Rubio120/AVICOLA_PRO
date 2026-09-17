@@ -14,3 +14,13 @@ class ApplicationError(Exception):
 class ConflictError(ApplicationError):
     status_code = 409
     title = "Conflict"
+
+
+class UnauthorizedError(ApplicationError):
+    status_code = 401
+    title = "Unauthorized"
+
+
+class ForbiddenError(ApplicationError):
+    status_code = 403
+    title = "Forbidden"

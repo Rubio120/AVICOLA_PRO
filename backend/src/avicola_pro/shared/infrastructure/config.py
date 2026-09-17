@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     session_cookie_http_only: Literal[True] = True
     session_cookie_secure: bool = False
     session_cookie_samesite: Literal["lax"] = "lax"
-    session_cookie_path: str = "/"
+    session_cookie_path: str = "/api/v1"
     session_idle_timeout_seconds: int = Field(default=1_800, ge=300, le=86_400)
     session_absolute_timeout_seconds: int = Field(default=28_800, ge=1_800, le=604_800)
     session_rotation_interval_seconds: int = Field(default=900, ge=60, le=86_400)
