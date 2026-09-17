@@ -9,6 +9,7 @@ from avicola_pro.bootstrap.app import create_app
 from avicola_pro.shared.infrastructure.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://avicola:password@127.0.0.1:5432/avicola_pro"
+SESSION_HMAC_KEY = "test-session-hmac-key-that-is-long-enough-for-security"
 
 
 class DatabaseStub:
@@ -27,7 +28,8 @@ async def test_liveness_does_not_query_database() -> None:
     async def fail_if_called() -> None:
         raise AssertionError("liveness must not query PostgreSQL")
 
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL), database=DatabaseStub(fail_if_called))
+    settings = Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY)
+    app = create_app(settings, database=DatabaseStub(fail_if_called))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health/live")
@@ -41,7 +43,8 @@ async def test_readiness_reports_database_availability() -> None:
     async def ready() -> None:
         return None
 
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL), database=DatabaseStub(ready))
+    settings = Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY)
+    app = create_app(settings, database=DatabaseStub(ready))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health/ready")
@@ -55,7 +58,8 @@ async def test_readiness_failure_is_safe_problem_details() -> None:
     async def unavailable() -> None:
         raise OSError("postgresql://user:secret@database/internal")
 
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL), database=DatabaseStub(unavailable))
+    settings = Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY)
+    app = create_app(settings, database=DatabaseStub(unavailable))
     transport = ASGITransport(app=app, raise_app_exceptions=False)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:

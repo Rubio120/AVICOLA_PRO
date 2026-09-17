@@ -13,6 +13,7 @@ from avicola_pro.shared.api.errors import ConflictError
 from avicola_pro.shared.infrastructure.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://avicola:password@127.0.0.1:5432/avicola_pro"
+SESSION_HMAC_KEY = "test-session-hmac-key-that-is-long-enough-for-security"
 
 
 class SamplePayload(BaseModel):
@@ -20,7 +21,7 @@ class SamplePayload(BaseModel):
 
 
 def build_test_app() -> FastAPI:
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
+    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY))
 
     @app.get("/conflict")
     async def conflict() -> None:

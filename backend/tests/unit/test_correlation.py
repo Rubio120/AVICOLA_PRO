@@ -11,11 +11,12 @@ from avicola_pro.bootstrap.app import create_app
 from avicola_pro.shared.infrastructure.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://avicola:password@127.0.0.1:5432/avicola_pro"
+SESSION_HMAC_KEY = "test-session-hmac-key-that-is-long-enough-for-security"
 
 
 @pytest.mark.asyncio
 async def test_correlation_id_is_generated_and_returned() -> None:
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
+    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health/live")
@@ -25,7 +26,7 @@ async def test_correlation_id_is_generated_and_returned() -> None:
 
 @pytest.mark.asyncio
 async def test_valid_correlation_id_is_propagated() -> None:
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
+    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY))
 
     @app.get("/correlation-context")
     async def correlation_context() -> dict[str, object]:
@@ -40,7 +41,7 @@ async def test_valid_correlation_id_is_propagated() -> None:
 
 @pytest.mark.asyncio
 async def test_correlation_context_is_isolated_between_concurrent_requests() -> None:
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
+    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         first, second = await asyncio.gather(
@@ -54,7 +55,7 @@ async def test_correlation_context_is_isolated_between_concurrent_requests() -> 
 
 @pytest.mark.asyncio
 async def test_oversized_correlation_id_is_replaced() -> None:
-    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL))
+    app = create_app(Settings(_env_file=None, database_url=DATABASE_URL, session_hmac_key=SESSION_HMAC_KEY))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health/live", headers={"X-Correlation-ID": "x" * 200})

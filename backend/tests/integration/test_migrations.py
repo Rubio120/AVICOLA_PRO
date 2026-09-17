@@ -22,6 +22,7 @@ def _database_url() -> str:
 def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["AVICOLA_DATABASE_URL"] = _database_url()
+    environment["AVICOLA_SESSION_HMAC_KEY"] = "test-session-hmac-key-that-is-long-enough-for-security"
     return subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=BACKEND_ROOT,
