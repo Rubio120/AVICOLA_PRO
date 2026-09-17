@@ -11,7 +11,7 @@ from avicola_pro.bootstrap.app import create_app
 from avicola_pro.shared.infrastructure.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://avicola:password@127.0.0.1:5432/avicola_pro"
-SESSION_HMAC_KEY = "test-session-hmac-key-that-is-long-enough-for-security"
+SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
 
 
 @pytest.mark.asyncio

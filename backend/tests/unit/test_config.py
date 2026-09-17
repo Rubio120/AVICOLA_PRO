@@ -6,7 +6,8 @@ from pydantic import ValidationError
 from avicola_pro.shared.infrastructure.config import Environment, Settings
 
 VALID_DATABASE_URL = "postgresql+psycopg://avicola:local-password@127.0.0.1:5432/avicola_pro"
-VALID_SESSION_HMAC_KEY = "test-session-hmac-key-that-is-long-enough-for-security"
+VALID_SESSION_HMAC_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+LOCAL_DEVELOPMENT_HMAC_KEY = "bG9jYWwtZGV2ZWxvcG1lbnQtb25seS1zZXNzaW9uLWhtYWMta2V5"
 
 
 def test_local_settings_accept_postgresql_and_apply_business_defaults() -> None:
@@ -61,7 +62,7 @@ def test_nonlocal_settings_require_a_strong_nonplaceholder_hmac_key_and_secure_c
             database_url=VALID_DATABASE_URL,
             cors_origins=["https://avicola.example"],
             log_format="json",
-            session_hmac_key="placeholder-session-hmac-key-that-is-long-enough",
+            session_hmac_key=LOCAL_DEVELOPMENT_HMAC_KEY,
         )
 
     with pytest.raises(ValidationError, match="session_hmac_key"):
@@ -83,7 +84,30 @@ def test_nonlocal_settings_require_a_strong_nonplaceholder_hmac_key_and_secure_c
             cors_origins=["https://avicola.example"],
             log_format="json",
             session_cookie_secure=True,
-            session_hmac_key="placeholder-session-hmac-key-that-is-long-enough",
+            session_hmac_key=LOCAL_DEVELOPMENT_HMAC_KEY,
+        )
+
+
+@pytest.mark.parametrize(
+    "session_hmac_key",
+    [
+        "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE",
+        "not.a.valid.base64url.hmac.key................",
+        "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQg",
+    ],
+    ids=["repeated-bytes", "invalid-format", "decoded-key-too-short"],
+)
+def test_nonlocal_settings_reject_hmac_keys_without_32_random_decoded_bytes(session_hmac_key: str) -> None:
+    """A non-random, malformed, or short decoded HMAC key allows predictable session signatures."""
+    with pytest.raises(ValidationError, match="session_hmac_key"):
+        Settings(
+            _env_file=None,
+            environment=Environment.STAGING,
+            database_url=VALID_DATABASE_URL,
+            cors_origins=["https://avicola.example"],
+            log_format="json",
+            session_cookie_secure=True,
+            session_hmac_key=session_hmac_key,
         )
 
 

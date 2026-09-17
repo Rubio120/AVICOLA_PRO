@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from base64 import b64decode, urlsafe_b64encode
+from binascii import Error as BinasciiError
 from enum import StrEnum
 from functools import lru_cache
 from typing import Any, Literal, Self
@@ -7,6 +9,9 @@ from typing import Any, Literal, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
+
+SESSION_HMAC_MINIMUM_BYTES = 32
+LOCAL_DEVELOPMENT_SESSION_HMAC_KEY = "bG9jYWwtZGV2ZWxvcG1lbnQtb25seS1zZXNzaW9uLWhtYWMta2V5"
 
 
 class Environment(StrEnum):
@@ -53,6 +58,7 @@ class Settings(BaseSettings):
     session_rotation_interval_seconds: int = Field(default=900, ge=60, le=86_400)
     session_token_bytes: int = Field(default=32, ge=32, le=64)
     session_token_entropy_bits: int = Field(default=256, ge=256, le=512, multiple_of=8)
+    # Unpadded URL-safe Base64 that encodes at least 32 random bytes.
     session_hmac_key: SecretStr
     csrf_token_bytes: int = Field(default=32, ge=32, le=64)
     password_min_length: int = Field(default=12, ge=12, le=128)
@@ -88,8 +94,22 @@ class Settings(BaseSettings):
     @field_validator("session_hmac_key")
     @classmethod
     def validate_session_hmac_key(cls, value: SecretStr) -> SecretStr:
-        if len(value.get_secret_value()) < 32:
-            raise ValueError("session_hmac_key must contain at least 32 characters")
+        raw_value = value.get_secret_value()
+        try:
+            encoded_key = raw_value.encode("ascii")
+            decoded_key = b64decode(
+                encoded_key + b"=" * (-len(encoded_key) % 4),
+                altchars=b"-_",
+                validate=True,
+            )
+        except (BinasciiError, UnicodeEncodeError, ValueError) as exc:
+            raise ValueError("session_hmac_key must be unpadded URL-safe Base64") from exc
+        if urlsafe_b64encode(decoded_key).rstrip(b"=") != encoded_key:
+            raise ValueError("session_hmac_key must be canonical unpadded URL-safe Base64")
+        if len(decoded_key) < SESSION_HMAC_MINIMUM_BYTES:
+            raise ValueError(f"session_hmac_key must decode to at least {SESSION_HMAC_MINIMUM_BYTES} bytes")
+        if len(set(decoded_key)) < SESSION_HMAC_MINIMUM_BYTES // 2:
+            raise ValueError("session_hmac_key must encode non-repeating random bytes")
         return value
 
     @model_validator(mode="after")
@@ -112,9 +132,7 @@ class Settings(BaseSettings):
             raise ValueError("wildcard CORS origin is forbidden in staging and production")
         if not self.session_cookie_secure:
             raise ValueError("session_cookie_secure must be enabled in staging and production")
-        hmac_key = self.session_hmac_key.get_secret_value().lower()
-        insecure_hmac_markers = ("local-development-only", "placeholder", "changeme", "example")
-        if any(marker in hmac_key for marker in insecure_hmac_markers):
+        if self.session_hmac_key.get_secret_value() == LOCAL_DEVELOPMENT_SESSION_HMAC_KEY:
             raise ValueError("session_hmac_key placeholder is forbidden in staging and production")
         database_value = self.database_url.get_secret_value().lower()
         database_url = make_url(database_value)
