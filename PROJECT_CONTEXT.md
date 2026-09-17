@@ -8,7 +8,7 @@ Este archivo es el registro maestro de continuidad de AVÍCOLA PRO. Toda sesión
 - Después de actualizar ambos documentos, crear un commit verificable y hacer push a GitHub.
 - Nunca registrar secretos, contraseñas, tokens, certificados, cookies ni valores reales de producción.
 - Si el código, este contexto y las especificaciones oficiales difieren, detener el avance, documentar la discrepancia y solicitar revisión. No cambiar decisiones oficiales silenciosamente.
-- No iniciar una entrega posterior sin cerrar el gate de la actual y obtener la aprobación requerida. En particular, no iniciar la Entrega 2 sin aprobación explícita del usuario.
+- No iniciar una entrega posterior sin cerrar el gate de la actual y obtener la aprobación requerida. La Entrega 2 está autorizada; no iniciar la Entrega 3 sin aprobación explícita del usuario.
 
 ## Objetivo y alcance de V1
 
@@ -118,9 +118,16 @@ Gate ejecutado:
 - URL PostgreSQL de staging/producción obligatoriamente completa;
 - correlation ID enlazado al contexto estructurado y errores inesperados registrados sin filtrar su mensaje.
 
-Pendiente: esperar aprobación explícita para Entrega 2. No existe trabajo autorizado posterior a Entrega 1.
+La Entrega 2 fue autorizada el 2026-09-17. Su diseño oficial y plan están en
+`docs/superpowers/specs/2026-09-17-delivery-02-identity-rbac-audit-design.md` y
+`docs/implementation-plans/2026-09-17-delivery-02-identity-rbac-audit.md`.
 
-La Entrega 2 no está autorizada y no debe iniciarse.
+Arquitectura de autenticación aprobada: sesión opaca completamente estatal; identificador
+aleatorio en cookie HttpOnly/SameSite=Lax con Secure configurable; PostgreSQL conserva solo
+su hash; CSRF separado; rotación con detección de reutilización; revocación inmediata;
+RBAC exclusivamente backend; auditoría transaccional y bootstrap idempotente del primer
+administrador. La contraseña temporal se genera criptográficamente, se muestra una sola vez,
+solo se persiste su hash y el primer acceso obliga a reemplazarla.
 
 ## Decisiones funcionales consolidadas
 
@@ -182,7 +189,7 @@ Inventario conocido del entorno Codex al 2026-09-16:
 - skills de Superpowers para brainstorming, planes, TDD, debugging sistemático, ejecución/revisión y verificación antes de completar;
 - plugins/skills de backend development, Python development, frontend/mobile development, security scanning y utilidades OpenAI para documentos, PDF, presentaciones, hojas de cálculo, visualización, plugins y creación/instalación de skills.
 
-Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana ni autorizan ampliar el alcance. La Entrega 1 puede usar especialistas de Python/FastAPI, frontend, despliegue, testing y arquitectura. No se deben iniciar tareas de Identidad/Entrega 2.
+Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana ni autorizan ampliar el alcance. La Entrega 2 puede usar especialistas de Python/FastAPI, frontend, despliegue, testing, seguridad y arquitectura. No se debe iniciar la Entrega 3.
 
 ## Autonomía segura
 
@@ -196,25 +203,25 @@ Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana 
 
 ## Política de Git y checkpoints
 
-- Rama aislada por entrega; rama actual: `delivery/01-foundation`.
+- Rama aislada por entrega; rama actual: `delivery/02-identity-rbac-audit`, worktree local `.worktrees/delivery-02-identity-rbac-audit`.
 - Commits pequeños y verificables con Conventional Commits; un commit por entrega o subentrega revisable.
 - No mezclar cambios ajenos, artefactos locales o secretos. No hacer commit con pruebas rotas salvo un checkpoint WIP explícito por continuidad de emergencia.
 - No reescribir historia compartida. Tags solo después del gate de release.
 - Después de una entrega importante y antes de terminar sesión: actualizar `PROJECT_CONTEXT.md`, `PROJECT_STATUS.md` y `CHANGELOG.md` cuando corresponda; ejecutar `git diff --check` y las pruebas pertinentes; revisar staged diff; commit; push; confirmar que rama local y remota coinciden.
 - Ante riesgo de corte de energía, crear un checkpoint WIP claramente rotulado y hacer push; al reanudar, no confundirlo con el cierre del gate.
 
-Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa: `origin/delivery/01-foundation`.
+Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa de trabajo: `origin/delivery/02-identity-rbac-audit` después del primer push.
 
-Último checkpoint remoto técnico: `ee294d6` — `fix: harden delivery 1 foundation checks`. Cierre previo: `2fb0aa4`; implementación inicial: `b276cfb`; checkpoint WIP: `2ca101c664d108f77beb20539baaa96abb40b9d2`.
+Último checkpoint remoto de Entrega 1: `73ab758` — `chore: ignore local worktrees`. El último checkpoint funcional de Entrega 1 es `ee294d6` — `fix: harden delivery 1 foundation checks`.
 
 ## Recuperación tras corte de energía o interrupción
 
 1. No borrar ni limpiar archivos al iniciar.
-2. Abrir la raíz del repositorio y leer `PROJECT_CONTEXT.md`, `PROJECT_STATUS.md`, el plan de la Entrega 1 y `git log -10 --oneline --decorate`.
+2. Abrir la raíz del repositorio y leer `PROJECT_CONTEXT.md`, `PROJECT_STATUS.md`, el diseño/plan de la Entrega 2 y `git log -10 --oneline --decorate`.
 3. Ejecutar `git status --short --branch`, `git remote -v` y `git branch -vv` para identificar rama, cambios locales y sincronización remota.
-4. Confirmar que la rama es `delivery/01-foundation` y que el checkpoint remoto esperado está disponible. No cambiar de rama si hay cambios sin identificar.
+4. Confirmar que la rama es `delivery/02-identity-rbac-audit` y que el checkpoint remoto esperado está disponible. No cambiar de rama si hay cambios sin identificar.
 5. Inspeccionar cada archivo modificado/no rastreado; asumir que pertenece al usuario hasta demostrar lo contrario. No usar comandos destructivos.
-6. Comparar el trabajo con `docs/implementation-plans/2026-09-16-delivery-01-foundation.md` y continuar desde la primera verificación pendiente.
+6. Comparar el trabajo con `docs/implementation-plans/2026-09-17-delivery-02-identity-rbac-audit.md` y continuar desde la primera verificación pendiente.
 7. Restaurar herramientas solo desde lockfiles: backend con `uv sync --frozen --all-groups`; frontend con `npm.cmd ci` en Windows.
 8. Levantar PostgreSQL 16, migrar desde base vacía, ejecutar gates y smoke tests. Registrar resultados reales; no declarar cerrada la entrega por la mera existencia del checkpoint.
 9. Actualizar contexto/estado, revisar que no haya secretos, hacer commit y push al terminar.
@@ -234,7 +241,8 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 | Las reglas arquitectónicas no cubrían imports inversos dentro del módulo ni ciclos. | Se añadió matriz de dependencias por capa, restricciones intermodulares y detección DFS de ciclos con fixtures negativos. |
 | Producción aceptaba URLs PostgreSQL sin host, base, usuario o contraseña. | La URL se parsea con SQLAlchemy y staging/producción exigen las cuatro coordenadas. |
 | Correlation ID no estaba enlazado a Structlog y los 500 no producían evento seguro. | Middleware enlaza/restaura contextvars y el handler registra tipo, ruta y correlación sin mensaje sensible. |
-| El archivo no rastreado `tatus` existe en la raíz y parece una captura accidental de nombres de archivos. | Se preserva como cambio ajeno/no identificado y no se incluye en commits hasta que el usuario autorice eliminarlo o incorporarlo. |
+| El archivo no rastreado `tatus` era una captura accidental de nombres de archivos, sin contenido único. | Se inspeccionó y eliminó con la autorización previa del usuario; el árbol quedó limpio. |
+| PowerShell/Pytest/esbuild reciben denegaciones del sandbox al iniciar procesos o inspeccionar ancestros del worktree. | Usar TEMP/TMP dentro de `.cache` y ejecutar los gates con la escalación mínima cuando la restricción del sandbox sea la causa demostrada. |
 | El output de algunas herramientas muestra mojibake de UTF-8 en la consola PowerShell. | Los archivos se mantienen en UTF-8 mediante `.editorconfig`/`.gitattributes`; validar contenido con herramientas que respeten UTF-8 y no recodificar masivamente sin necesidad. |
 
 ## Comandos importantes
@@ -289,7 +297,7 @@ Las variables de conexión y secretos se proporcionan por el entorno local/CI y 
 
 ## Pendientes y riesgos abiertos
 
-Pendiente inmediato: esperar aprobación explícita. No avanzar a Identidad/RBAC/Auditoría persistente ni a ningún módulo de negocio.
+Pendiente inmediato: ejecutar el plan de Entrega 2 con TDD, cerrar sus gates y detenerse. No avanzar a Entrega 3 sin aprobación explícita.
 
 Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus módulos:
 

@@ -2,13 +2,13 @@
 
 ## Última actualización
 
-2026-09-16 — Entrega 1 revalidada y endurecida; gate local completo verde, pendiente de aprobación para iniciar Entrega 2.
+2026-09-17 — Entrega 2 autorizada; arquitectura de sesión opaca aprobada, rama aislada y línea base verificadas.
 
 ## Estado global
 
-**Entrega 1 / Base técnica reproducible completada.** Instalación limpia desde lockfiles,
-migraciones PostgreSQL 16, checks de backend/frontend, auditorías y smoke tests fueron
-ejecutados con resultados verdes. No se inició ningún alcance de Entrega 2.
+**Entrega 2 / Identidad, RBAC y Auditoría en curso.** La Entrega 1 permanece cerrada y
+respaldada. La especificación oficial y el plan ejecutable de Entrega 2 están redactados
+en `delivery/02-identity-rbac-audit`; todavía no se ha implementado código funcional.
 
 Fuente maestra de continuidad: `PROJECT_CONTEXT.md`. Debe actualizarse junto con este
 archivo después de cada entrega importante y antes de terminar una sesión; luego se debe
@@ -31,7 +31,7 @@ crear commit y hacer push sin incluir secretos.
 - [x] Segunda/tercera revisión arquitectónica sin hallazgos críticos/altos (architect reviewer, 2026-09-16).
 - [x] Base técnica reproducible (Entrega 1; gate local verde el 2026-09-16).
 - [x] Código técnico funcional: health/readiness, configuración, errores, logging, migraciones y UI técnica.
-- [ ] Módulos funcionales de negocio (comienzan en Entrega 2, aún no autorizada).
+- [ ] Entrega 2: Identidad, RBAC y Auditoría (autorizada y en ejecución).
 
 ## Decisiones oficiales
 
@@ -46,14 +46,14 @@ crear commit y hacer push sin incluir secretos.
 - Seguridad, permisos, auditoría y trazabilidad obligatorios.
 - Backup restaurado y verificado antes del piloto.
 
-## Próxima entrega
+## Entrega actual
 
-**Esperar aprobación explícita del usuario** antes de iniciar la **Entrega 2: Identidad,
-RBAC y Auditoría base**.
+**Entrega 2: Identidad, RBAC y Auditoría base.** Arquitectura oficial: sesión opaca
+completamente estatal, cookie HttpOnly/SameSite=Lax, Secure configurable, CSRF separado,
+rotación con detección de reutilización, revocación inmediata, RBAC backend, auditoría
+transaccional y bootstrap idempotente del administrador inicial.
 
-La Entrega 1 tiene como último checkpoint técnico publicado `ee294d6`
-(`fix: harden delivery 1 foundation checks`) en `origin/delivery/01-foundation`.
-No iniciar la Entrega 2 sin aprobación explícita del usuario.
+Rama activa: `delivery/02-identity-rbac-audit`. No iniciar Entrega 3 sin aprobación explícita.
 
 Evidencia local fresca del 2026-09-16:
 
