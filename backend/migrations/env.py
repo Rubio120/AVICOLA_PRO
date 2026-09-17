@@ -10,12 +10,14 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from avicola_pro.shared.infrastructure.config import get_settings
+from avicola_pro.shared.infrastructure.models import load_persistence_models, metadata
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+load_persistence_models()
+target_metadata = metadata
 
 
 def _database_url() -> str:

@@ -157,7 +157,11 @@ def test_all_approved_modules_have_hexagonal_layers() -> None:
 
     assert actual_modules == EXPECTED_MODULES
     for module_name in EXPECTED_MODULES:
-        actual_layers = {path.name for path in (MODULE_ROOT / module_name).iterdir() if path.is_dir()}
+        actual_layers = {
+            path.name
+            for path in (MODULE_ROOT / module_name).iterdir()
+            if path.is_dir() and not path.name.startswith("__")
+        }
         assert actual_layers == EXPECTED_LAYERS
 
 
