@@ -112,6 +112,16 @@ async def test_bootstrap_persists_only_argon2id_role_and_allowlisted_audit(caplo
 
     assert result.temporary_password not in user.password_hash
     assert user.password_hash.startswith("$argon2id$")
+    assert (
+        Argon2PasswordService(
+            PasswordPolicy(settings.password_min_length, settings.password_max_length),
+            time_cost=1,
+            memory_cost_kib=8_192,
+            parallelism=1,
+        )
+        .verify(result.temporary_password, user.password_hash)
+        .is_valid
+    )
     assert user.status == "ACTIVE"
     assert user.must_change_password is True
     assert assigned_role.code == "administrator"

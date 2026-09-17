@@ -20,6 +20,7 @@ _COMMON_PASSWORDS = frozenset(
     }
 )
 _TEMPORARY_SPECIAL_CHARACTERS = "!#$%&*+-=?@_"
+_TARGET_TEMPORARY_PASSWORD_LENGTH = 24
 
 
 class PasswordPolicyError(ValueError):
@@ -90,8 +91,10 @@ class Argon2PasswordService:
         return PasswordVerification(is_valid=True, updated_hash=updated_hash)
 
 
-def generate_temporary_password(policy: PasswordPolicy, *, length: int = 24) -> str:
+def generate_temporary_password(policy: PasswordPolicy, *, length: int | None = None) -> str:
     """Generate a policy-compliant temporary password with the operating-system CSPRNG."""
+    if length is None:
+        length = min(max(_TARGET_TEMPORARY_PASSWORD_LENGTH, policy.min_length), policy.max_length)
     if length < max(policy.min_length, 4) or length > policy.max_length:
         raise ValueError("temporary password length is outside policy")
 

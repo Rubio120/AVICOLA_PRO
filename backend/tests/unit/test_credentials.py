@@ -76,3 +76,20 @@ def test_temporary_passwords_are_unique_and_satisfy_policy() -> None:
         assert any(character.isupper() for character in password)
         assert any(character.isdigit() for character in password)
         assert any(not character.isalnum() for character in password)
+
+
+@pytest.mark.parametrize(
+    ("min_length", "max_length", "expected_length"),
+    [(25, 128, 25), (12, 20, 20)],
+)
+def test_default_temporary_password_length_is_clamped_to_policy(
+    min_length: int,
+    max_length: int,
+    expected_length: int,
+) -> None:
+    policy = PasswordPolicy(min_length=min_length, max_length=max_length)
+
+    password = generate_temporary_password(policy)
+
+    assert len(password) == expected_length
+    policy.validate(password)

@@ -33,3 +33,20 @@ def test_bootstrap_identity_rejects_invalid_operator_input(
 ) -> None:
     with pytest.raises(ValueError):
         BootstrapIdentity.from_input(username=username, email=email, display_name=display_name)
+
+
+@pytest.mark.parametrize(
+    ("username", "email", "display_name"),
+    [
+        ("initial.admin\n", "admin@example.test", "Administrator"),
+        ("initial.admin", "admin@example.test\u202e", "Administrator"),
+        ("initial.admin", "admin@example.test", "Ana\nMaría"),
+    ],
+)
+def test_bootstrap_identity_rejects_unicode_controls_before_normalization(
+    username: str,
+    email: str,
+    display_name: str,
+) -> None:
+    with pytest.raises(ValueError):
+        BootstrapIdentity.from_input(username=username, email=email, display_name=display_name)

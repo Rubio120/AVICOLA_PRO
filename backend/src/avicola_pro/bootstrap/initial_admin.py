@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from uuid import uuid4
 
 from sqlalchemy import or_, select, text
@@ -31,10 +32,12 @@ class InitialAdministratorBootstrapper:
         session_factory: async_sessionmaker[AsyncSession],
         password_service: Argon2PasswordService,
         password_policy: PasswordPolicy,
+        temporary_password_generator: Callable[[PasswordPolicy], str] = generate_temporary_password,
     ) -> None:
         self._session_factory = session_factory
         self._password_service = password_service
         self._password_policy = password_policy
+        self._temporary_password_generator = temporary_password_generator
 
     async def create(self, identity: BootstrapIdentity) -> BootstrapResult:
         """Persist a first administrator and return its generated credential exactly once."""
@@ -58,7 +61,7 @@ class InitialAdministratorBootstrapper:
             if existing_assignment is not None or conflicting_identity is not None:
                 raise BootstrapAlreadyCompletedError("initial administrator bootstrap is unavailable")
 
-            temporary_password = generate_temporary_password(self._password_policy)
+            temporary_password = self._temporary_password_generator(self._password_policy)
             user = User(
                 id=uuid4(),
                 username=identity.username,
