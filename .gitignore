@@ -23,6 +23,7 @@ coverage/
 # Local tools and caches
 .cache/
 .tools/
+.worktrees/
 
 # Quality evidence generated locally
 artifacts/quality/**
