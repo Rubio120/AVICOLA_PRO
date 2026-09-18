@@ -1,4 +1,5 @@
 import { IdentityPanel } from "@/components/identity-panel";
+import { CatalogPanel } from "@/components/catalog-panel";
 import { SystemStatus } from "@/components/system-status";
 import { getBackendHealth } from "@/lib/api/health";
 import { getServerEnv } from "@/lib/env";
@@ -20,9 +21,10 @@ export default async function HomePage() {
           Plataforma empresarial preparada para iniciar la implementación modular de forma segura y trazable.
         </p>
         <SystemStatus available={health.available} />
-        <p className="scope-note">Entrega 2 · Identidad, RBAC y auditoría base</p>
+        <p className="scope-note">Entrega 3 · Configuración, terceros y catálogo</p>
       </section>
       <IdentityPanel apiBaseUrl="" />
+      <CatalogPanel />
     </main>
   );
 }

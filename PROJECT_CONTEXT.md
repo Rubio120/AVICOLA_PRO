@@ -226,6 +226,20 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 
 ## Recuperación tras corte de energía o interrupción
 
+## Continuidad posterior — 2026-09-18
+
+La Entrega 3 quedó implementada en el working tree del worktree `AVICOLA_PRO_WEEKEND`.
+El head de Alembic es `0003_settings_parties_catalog`; la migración fue probada desde base
+vacía y en roundtrip sobre PostgreSQL 16 real. Se incorporaron `company_profile`, monedas,
+unidades, impuestos, timbrados, secuencias, métodos de pago, clientes, proveedores, categorías,
+productos, granjas, galpones y depósitos, junto con sus modelos, restricciones e índices.
+
+La API de settings/parties/catalog aplica sesión, CSRF, RBAC, paginación y auditoría; la UI
+incluye consulta filtrable de productos mediante BFF same-origin. La suite backend completa pasó
+98 pruebas con cobertura 81,30 %, Ruff y Mypy; frontend pasó ESLint, TypeScript y build. Vitest
+está escrito y queda delegado al PowerShell externo por el PermissionError conocido de esbuild
+contra rutas padre de `C:\Users`. No se hizo commit ni push por instrucción expresa del usuario.
+
 1. No borrar ni limpiar archivos al iniciar.
 2. Abrir la raíz del repositorio y leer `PROJECT_CONTEXT.md`, `PROJECT_STATUS.md`, el diseño/plan de la Entrega 2 y `git log -10 --oneline --decorate`.
 3. Ejecutar `git status --short --branch`, `git remote -v` y `git branch -vv` para identificar rama, cambios locales y sincronización remota.
@@ -333,6 +347,12 @@ autocontenido no pudo arrancar por la restricción de tokens de Windows. No se u
 no se redujeron gates y no se alteraron datos reales.
 
 ## Fuentes oficiales relacionadas
+
+## Continuidad autoritativa - 2026-09-18
+
+La Entrega 3 es la entrega trabajada en este checkpoint del working tree. La migración `0003_settings_parties_catalog` y sus modelos cubren configuración, terceros, catálogo, granjas, galpones y depósitos sobre PostgreSQL real. La API exige sesión, CSRF, RBAC y auditoría; la UI usa el BFF same-origin. La suite backend pasó 100 tests con 81.58 % de cobertura; Ruff, formato, Mypy, ESLint, TypeScript y build pasaron. Vitest queda delegado al PowerShell externo únicamente por el `PermissionError` ambiental de esbuild al leer rutas padre de `C:\Users`.
+
+No se inició la Entrega 4, no se hizo commit/push/reset y no se alteraron datos reales. `AGENTS.md` no está presente en esta raíz.
 
 - `ARCHITECTURE.md`: arquitectura y ADR oficiales.
 - `DATABASE.md`: entidades, invariantes, estados y conciliaciones.

@@ -101,6 +101,30 @@ Ninguno de estos riesgos impide construir la base técnica o Identidad; deben re
 
 ## Protocolo de continuidad
 
+## Verificación de Entrega 3 - 2026-09-18
+
+La primera entrega pendiente fue la Entrega 3: configuración, terceros y catálogo. Quedó implementada en este working tree sin commit ni push. Incluye la migración `0003_settings_parties_catalog`, modelos PostgreSQL compartidos, reglas PYG/vigencias/numeración, API protegida con sesión/CSRF/RBAC/auditoría y panel de catálogo con búsqueda, formulario y paginación.
+
+Evidencia fresca: PostgreSQL 16 real en `127.0.0.1:55432`, migración limpia y roundtrip; 100 tests backend y cobertura 81.58 %; Ruff, formato y Mypy verdes; ESLint, TypeScript y build frontend verdes; `npm audit` y `pip-audit` sin vulnerabilidades conocidas auditables. Vitest queda delegado al PowerShell externo por el `PermissionError` conocido de esbuild contra rutas padre de `C:\Users`.
+
+No se inició la Entrega 4. `AGENTS.md` no existe en esta raíz. El siguiente paso autorizado es revisión/aceptación externa de esta entrega.
+
+## Verificación de continuidad — 2026-09-18
+
+La primera entrega pendiente fue la Entrega 3 — Configuración, terceros y catálogo. Se añadió
+la migración PostgreSQL `0003_settings_parties_catalog`, modelos compartidos, reglas de PYG,
+vigencias fiscales, singleton empresarial, secuencias, terceros, catálogo, granjas, galpones y
+depósitos, además de la API protegida, auditoría funcional y panel frontend de catálogo.
+
+Gates ejecutados en este worktree: 98 pruebas backend verdes, cobertura 81,30 %, Ruff/Mypy
+verdes, migración limpia/upgrade/downgrade y seed idempotente en PostgreSQL 16 real sobre
+`127.0.0.1:55432`, health/readiness cubiertos por la suite, ESLint/TypeScript/build verdes,
+`npm audit` sin vulnerabilidades y `pip-audit` sin vulnerabilidades conocidas para dependencias
+publicadas. Vitest quedó delegado al PowerShell externo por la denegación ambiental conocida de
+esbuild al leer rutas padre de `C:\Users`.
+
+No se hizo commit, push, reset ni se inició la Entrega 4.
+
 ## Verificación de continuidad — 2026-09-17
 
 La revisión independiente confirmó y se corrigieron los riesgos de revocación al desactivar

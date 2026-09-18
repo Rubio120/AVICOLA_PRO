@@ -11,6 +11,7 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
     assert importlib.util.find_spec("avicola_pro.shared.infrastructure.models") is not None
 
     persistence = importlib.import_module("avicola_pro.shared.infrastructure.models")
+    persistence.load_persistence_models()
     importlib.import_module("avicola_pro.modules.identity.infrastructure.models")
     importlib.import_module("avicola_pro.modules.audit.infrastructure.models")
 
@@ -23,6 +24,20 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "sessions",
         "user_roles",
         "users",
+        "company_profile",
+        "currencies",
+        "units_of_measure",
+        "tax_rates",
+        "stamps",
+        "document_sequences",
+        "payment_methods",
+        "customers",
+        "suppliers",
+        "product_categories",
+        "products",
+        "farms",
+        "houses",
+        "warehouses",
     }
 
 
@@ -30,6 +45,7 @@ def test_persistence_models_use_postgresql_uuid_timestamptz_and_jsonb() -> None:
     assert importlib.util.find_spec("avicola_pro.shared.infrastructure.models") is not None
 
     persistence = importlib.import_module("avicola_pro.shared.infrastructure.models")
+    persistence.load_persistence_models()
     importlib.import_module("avicola_pro.modules.identity.infrastructure.models")
     importlib.import_module("avicola_pro.modules.audit.infrastructure.models")
     tables = persistence.metadata.tables

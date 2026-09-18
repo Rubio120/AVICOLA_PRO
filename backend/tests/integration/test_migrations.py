@@ -47,6 +47,20 @@ EXPECTED_TABLES = {
     "sessions",
     "user_roles",
     "users",
+    "company_profile",
+    "currencies",
+    "units_of_measure",
+    "tax_rates",
+    "stamps",
+    "document_sequences",
+    "payment_methods",
+    "customers",
+    "suppliers",
+    "product_categories",
+    "products",
+    "farms",
+    "houses",
+    "warehouses",
 }
 
 
@@ -64,7 +78,7 @@ def migrated_database() -> None:
 def test_identity_migration_round_trip_on_real_postgresql() -> None:
     current = _run_alembic("current")
 
-    assert "0002_identity_rbac_audit" in current.stdout
+    assert "0003_settings_parties_catalog" in current.stdout
 
     with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
         cursor.execute("select version()")

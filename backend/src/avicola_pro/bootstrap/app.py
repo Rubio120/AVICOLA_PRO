@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,11 +21,12 @@ from avicola_pro.modules.identity.infrastructure.authentication import (
     SQLAlchemyAuthenticationRepository,
 )
 from avicola_pro.modules.identity.infrastructure.authorization import SQLAlchemyAuthorizationService
+from avicola_pro.modules.settings.api.routes import build_settings_router
 from avicola_pro.shared.api.error_handlers import install_error_handlers
 from avicola_pro.shared.api.health import router as health_router
 from avicola_pro.shared.api.middleware import CorrelationIdMiddleware
 from avicola_pro.shared.infrastructure.config import Settings, get_settings
-from avicola_pro.shared.infrastructure.database import Database, create_database_resources
+from avicola_pro.shared.infrastructure.database import Database, DatabaseResources, create_database_resources
 from avicola_pro.shared.infrastructure.logging import configure_logging
 
 
@@ -102,6 +104,15 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             cookie_name=resolved_settings.session_cookie_name,
         )
         application.include_router(build_auth_router(authentication, resolved_settings))
+        application.include_router(
+            build_settings_router(
+                authentication,
+                authorization,
+                cast(DatabaseResources, database_resources),
+                SQLAlchemyFunctionalAuditWriter(),
+                resolved_settings.session_cookie_name,
+            )
+        )
     application.add_middleware(CorrelationIdMiddleware)
     install_error_handlers(application)
     application.include_router(health_router)

@@ -34,6 +34,9 @@ BASE_PERMISSION_KEYS = (
     "reports.profitability.read",
     "reports.export",
     "backups.execute",
+    "parties.manage",
+    "catalog.manage",
+    "catalog.read",
 )
 
 BASE_ROLE_CODES = (
