@@ -1,7 +1,8 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $backendRoot = Join-Path $projectRoot "backend"
+$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $cacheRoot = Join-Path $projectRoot ".cache"
 $dataDir = Join-Path $cacheRoot "postgres-data"
 $passwordFile = Join-Path $cacheRoot "postgres-test-password.txt"
@@ -13,7 +14,7 @@ $env:UV_PYTHON_INSTALL_DIR = Join-Path $projectRoot ".tools\python"
 
 Push-Location $backendRoot
 try {
-    $pgBin = (& ".venv\Scripts\python.exe" -c "import postgresql_binaries; print(postgresql_binaries.bin())").Trim()
+    $pgBin = (& $pythonExe -c "import postgresql_binaries; print(postgresql_binaries.bin())").Trim()
 }
 finally {
     Pop-Location
@@ -44,3 +45,5 @@ foreach ($databaseName in @("avicola_pro", "avicola_pro_test")) {
 }
 
 Write-Host "PostgreSQL 16 application and test databases are ready on 127.0.0.1:$port."
+
+
