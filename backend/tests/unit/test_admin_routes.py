@@ -10,6 +10,9 @@ SESSION_HMAC_KEY = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
 class _Database:
     session_factory = object()
 
+    async def check_ready(self) -> None:
+        return None
+
     async def dispose(self) -> None:
         return None
 
