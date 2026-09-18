@@ -94,6 +94,24 @@ Ninguno de estos riesgos impide construir la base técnica o Identidad; deben re
 
 ## Protocolo de continuidad
 
+## Verificación de continuidad — 2026-09-17
+
+La revisión independiente confirma que la rama contiene autenticación con sesiones opacas,
+Argon2id, migración, bootstrap idempotente y eventos de seguridad. La Entrega 2 no queda
+cerrada: faltan los endpoints administrativos de RBAC/auditoría (`/api/v1/users`,
+`/api/v1/roles`, `/api/v1/permissions` y `/api/v1/audit-events`) y la UI de identidad
+descrita en el plan.
+
+El gate PostgreSQL tampoco pudo completarse en este entorno. El servidor local accesible
+en `127.0.0.1:5432` no terminó la conexión async y el PostgreSQL 16.14 autocontenido no
+pudo iniciar por la restricción de tokens de Windows. No se sustituyó PostgreSQL por SQLite
+ni se redujo cobertura o seguridad; la suite de integración y cobertura global quedan
+pendientes de un entorno PostgreSQL operativo.
+
+El commit local de este registro también quedó bloqueado porque Git no puede crear
+`.git/worktrees/delivery-02-identity-rbac-audit/index.lock` bajo las restricciones de
+permisos del entorno; no se forzaron permisos ni se hizo push.
+
 Una sesión futura debe leer, en orden:
 
 1. `PROJECT_CONTEXT.md` y `PROJECT_STATUS.md`.

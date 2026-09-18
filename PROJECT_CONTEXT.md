@@ -309,6 +309,18 @@ Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus mó
 6. Política funcional de reapertura de caja y autorizaciones de alto impacto.
 7. Métricas productivas adicionales antes de ampliar `production_events`.
 
+## Verificación de continuidad — 2026-09-17
+
+La Entrega 2 sigue en ejecución y no debe avanzar a Entrega 3. La revisión independiente
+confirmó que la rama ya contiene autenticación con sesiones opacas, Argon2id, migración,
+bootstrap idempotente y eventos de seguridad, pero aún faltan los endpoints administrativos
+de RBAC/auditoría y la UI de identidad del plan.
+
+La integración PostgreSQL y la cobertura global no pudieron cerrarse en esta máquina: el
+servidor accesible en `127.0.0.1:5432` no completó la conexión async y el PostgreSQL 16.14
+autocontenido no pudo arrancar por la restricción de tokens de Windows. No se utilizó SQLite,
+no se redujeron gates y no se alteraron datos reales.
+
 ## Fuentes oficiales relacionadas
 
 - `ARCHITECTURE.md`: arquitectura y ADR oficiales.
