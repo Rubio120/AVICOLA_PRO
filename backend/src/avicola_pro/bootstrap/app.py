@@ -8,14 +8,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from avicola_pro import __version__
 from avicola_pro.modules.audit.infrastructure.security import SQLAlchemySecurityEventWriter
+from avicola_pro.modules.audit.infrastructure.writer import SQLAlchemyFunctionalAuditWriter
+from avicola_pro.modules.identity.api.admin import build_admin_router
 from avicola_pro.modules.identity.api.auth import CSRF_HEADER, build_auth_router
 from avicola_pro.modules.identity.api.middleware import ForcedPasswordChangeMiddleware
 from avicola_pro.modules.identity.application.authentication import AuthenticationService
 from avicola_pro.modules.identity.application.credentials import Argon2PasswordService, PasswordPolicy
 from avicola_pro.modules.identity.application.sessions import SessionTokenService
+from avicola_pro.modules.identity.infrastructure.administration import SQLAlchemyAdministrationService
 from avicola_pro.modules.identity.infrastructure.authentication import (
     SQLAlchemyAuthenticationRepository,
 )
+from avicola_pro.modules.identity.infrastructure.authorization import SQLAlchemyAuthorizationService
 from avicola_pro.shared.api.error_handlers import install_error_handlers
 from avicola_pro.shared.api.health import router as health_router
 from avicola_pro.shared.api.middleware import CorrelationIdMiddleware
@@ -76,6 +80,14 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
             rate_limit_window_seconds=resolved_settings.login_rate_limit_window_seconds,
         )
         application.state.authentication = authentication
+        administration = SQLAlchemyAdministrationService(
+            session_factory,
+            Argon2PasswordService(password_policy),
+            SQLAlchemyFunctionalAuditWriter(),
+        )
+        authorization = SQLAlchemyAuthorizationService(session_factory)
+        application.state.authorization = authorization
+        application.include_router(build_admin_router(authentication, authorization, administration, resolved_settings))
         application.add_middleware(
             ForcedPasswordChangeMiddleware,
             service=authentication,

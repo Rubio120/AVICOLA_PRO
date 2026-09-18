@@ -1,17 +1,17 @@
 import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: { "@": resolve(process.cwd(), "src") },
   },
   test: {
     environment: "jsdom",
     pool: "threads",
     maxWorkers: 1,
-    setupFiles: ["./tests/setup.ts"],
+    setupFiles: [resolve(process.cwd(), "tests/setup.ts")],
     coverage: {
       provider: "v8",
       reporter: ["text"],

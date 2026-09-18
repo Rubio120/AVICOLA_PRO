@@ -297,7 +297,7 @@ Las variables de conexión y secretos se proporcionan por el entorno local/CI y 
 
 ## Pendientes y riesgos abiertos
 
-Pendiente inmediato: ejecutar el plan de Entrega 2 con TDD, cerrar sus gates y detenerse. No avanzar a Entrega 3 sin aprobación explícita.
+Pendiente inmediato: cerrar los gates restantes de Entrega 2, especialmente Vitest/cobertura frontend y revisión independiente. No avanzar a Entrega 3 sin aprobación explícita.
 
 Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus módulos:
 
@@ -311,10 +311,11 @@ Riesgos que no bloquean la base técnica, pero deben resolverse antes de sus mó
 
 ## Verificación de continuidad — 2026-09-17
 
-La Entrega 2 sigue en ejecución y no debe avanzar a Entrega 3. La revisión independiente
-confirmó que la rama ya contiene autenticación con sesiones opacas, Argon2id, migración,
-bootstrap idempotente y eventos de seguridad, pero aún faltan los endpoints administrativos
-de RBAC/auditoría y la UI de identidad del plan.
+La Entrega 2 sigue en ejecución y no debe avanzar a Entrega 3. Esta sesión añadió endpoints
+administrativos protegidos de usuarios, roles, permisos y auditoría, auditoría funcional dentro
+de la transacción de mutación, prueba de integración PostgreSQL y una UI inicial de identidad.
+El gate frontend de Vitest sigue bloqueado por una denegación de lectura de esbuild fuera del
+workspace; ESLint, TypeScript y build sí terminaron correctamente.
 
 La integración PostgreSQL y la cobertura global no pudieron cerrarse en esta máquina: el
 servidor accesible en `127.0.0.1:5432` no completó la conexión async y el PostgreSQL 16.14

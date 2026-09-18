@@ -364,6 +364,13 @@ class AuthenticationService:
         )
         return record.user
 
+    async def validate_mutation(
+        self, session_token: str | None, csrf_token: str | None, context: RequestContext
+    ) -> UserAccount:
+        """Validate an authenticated state-changing request without changing session state."""
+        record = await self._load_session(session_token, context, csrf_token=csrf_token)
+        return record.user
+
     async def password_change_is_required(
         self, session_token: str | None, context: RequestContext
     ) -> UserAccount | None:

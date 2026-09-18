@@ -2,13 +2,14 @@
 
 ## Última actualización
 
-2026-09-17 — Entrega 2 autorizada; arquitectura de sesión opaca aprobada, rama aislada y línea base verificadas.
+2026-09-18 — Entrega 2 parcialmente implementada; backend administrativo y UI de identidad añadidos, gates frontend de Vitest bloqueados por el sandbox.
 
 ## Estado global
 
 **Entrega 2 / Identidad, RBAC y Auditoría en curso.** La Entrega 1 permanece cerrada y
-respaldada. La especificación oficial y el plan ejecutable de Entrega 2 están redactados
-en `delivery/02-identity-rbac-audit`; todavía no se ha implementado código funcional.
+respaldada. La autenticación/sesiones ya existente se amplió con endpoints administrativos
+protegidos, auditoría funcional transaccional y una UI inicial de identidad. El gate frontend
+de Vitest aún no puede ejecutarse en este entorno por una denegación de lectura de esbuild.
 
 Fuente maestra de continuidad: `PROJECT_CONTEXT.md`. Debe actualizarse junto con este
 archivo después de cada entrega importante y antes de terminar una sesión; luego se debe
@@ -31,7 +32,7 @@ crear commit y hacer push sin incluir secretos.
 - [x] Segunda/tercera revisión arquitectónica sin hallazgos críticos/altos (architect reviewer, 2026-09-16).
 - [x] Base técnica reproducible (Entrega 1; gate local verde el 2026-09-16).
 - [x] Código técnico funcional: health/readiness, configuración, errores, logging, migraciones y UI técnica.
-- [ ] Entrega 2: Identidad, RBAC y Auditoría (autorizada y en ejecución).
+- [ ] Entrega 2: Identidad, RBAC y Auditoría (implementación ampliada; gates finales pendientes).
 
 ## Decisiones oficiales
 
@@ -55,7 +56,11 @@ transaccional y bootstrap idempotente del administrador inicial.
 
 Rama activa: `delivery/02-identity-rbac-audit`. No iniciar Entrega 3 sin aprobación explícita.
 
-Evidencia local fresca del 2026-09-16:
+Evidencia local fresca del 2026-09-18:
+
+- backend completo sobre PostgreSQL 16 real: 95 pruebas, cobertura 86,21 %, Ruff y Mypy verdes;
+- integración administrativa: login de administrador, permisos, creación de usuario y auditoría funcional verificados;
+- frontend: ESLint, TypeScript y build Next.js verdes; Vitest bloqueado antes de cargar por acceso denegado a `../..` desde esbuild;
 
 - clean install: CPython 3.13.15/79 paquetes y npm/471 paquetes desde lockfiles;
 - Alembic: base vacía a `0001_baseline (head)` y roundtrip validado;
