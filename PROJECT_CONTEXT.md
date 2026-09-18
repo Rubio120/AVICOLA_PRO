@@ -129,6 +129,16 @@ RBAC exclusivamente backend; auditoría transaccional y bootstrap idempotente de
 administrador. La contraseña temporal se genera criptográficamente, se muestra una sola vez,
 solo se persiste su hash y el primer acceso obliga a reemplazarla.
 
+Estado de la Entrega 2 al 2026-09-18: **completada y verificada localmente**. Incluye
+administración protegida de usuarios, roles, permisos y auditoría; revocación de sesiones al
+desactivar cuentas; eventos de seguridad para denegaciones RBAC; auditoría transaccional de
+lecturas; y BFF same-origin de Next.js para login, restauración de sesión, cambio obligatorio
+de contraseña y logout. PostgreSQL 16 real en `127.0.0.1:55432` pasó migración limpia,
+roundtrip y health checks. La suite backend pasó 95 pruebas con 86,24 % de cobertura,
+Ruff/formato/Mypy, y el frontend pasó ESLint, TypeScript y build. Vitest está correctamente
+escrito pero su ejecución queda delegada al PowerShell externo por la denegación ambiental de
+esbuild al leer rutas padre de `C:\Users`.
+
 ## Decisiones funcionales consolidadas
 
 ### Inventario

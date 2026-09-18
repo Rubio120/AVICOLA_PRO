@@ -102,6 +102,24 @@ async def test_administrator_can_read_catalog_and_create_audited_user(
     )
     assert created.status_code == 201
     assert created.json()["must_change_password"] is True
+
+    operator_client = AsyncClient(transport=client._transport, base_url="http://test")  # noqa: SLF001
+    try:
+        operator_login = await operator_client.post(
+            "/api/v1/auth/login", json={"identity": "operator", "password": PASSWORD}
+        )
+        assert operator_login.status_code == 200
+        disabled = await client.patch(
+            f"/api/v1/users/{created.json()['id']}/status",
+            json={"status": "INACTIVE"},
+            headers={"X-CSRF-Token": csrf, "X-Correlation-ID": str(UUID(int=2))},
+        )
+        assert disabled.status_code == 204
+        assert (await operator_client.get("/api/v1/auth/me")).status_code == 401
+    finally:
+        await operator_client.aclose()
+
     audit = await client.get("/api/v1/audit-events")
     assert audit.status_code == 200
     assert any(item["action"] == "users.create" for item in audit.json()["items"])
+    assert any(item["action"] == "audit.read" for item in audit.json()["items"])

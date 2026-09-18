@@ -28,3 +28,6 @@ def test_delivery_two_admin_routes_are_registered() -> None:
     assert "/api/v1/roles" in paths
     assert "/api/v1/permissions" in paths
     assert "/api/v1/audit-events" in paths
+    assert "post" in app.openapi()["paths"]["/api/v1/roles"]
+    assert "patch" in app.openapi()["paths"]["/api/v1/roles/{role_id}/status"]
+    assert "put" in app.openapi()["paths"]["/api/v1/roles/{role_id}/permissions"]

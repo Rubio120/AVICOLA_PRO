@@ -2,14 +2,14 @@
 
 ## Última actualización
 
-2026-09-18 — Entrega 2 parcialmente implementada; backend administrativo y UI de identidad añadidos, gates frontend de Vitest bloqueados por el sandbox.
+2026-09-18 — Entrega 2 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
 
 ## Estado global
 
-**Entrega 2 / Identidad, RBAC y Auditoría en curso.** La Entrega 1 permanece cerrada y
-respaldada. La autenticación/sesiones ya existente se amplió con endpoints administrativos
-protegidos, auditoría funcional transaccional y una UI inicial de identidad. El gate frontend
-de Vitest aún no puede ejecutarse en este entorno por una denegación de lectura de esbuild.
+**Entrega 2 / Identidad, RBAC y Auditoría completada.** La Entrega 1 permanece cerrada y
+respaldada. La autenticación/sesiones se amplió con administración protegida de usuarios,
+roles y permisos, auditoría funcional transaccional, eventos de seguridad y una UI de identidad
+con BFF same-origin, cambio obligatorio de contraseña, restauración de sesión y logout.
 
 Fuente maestra de continuidad: `PROJECT_CONTEXT.md`. Debe actualizarse junto con este
 archivo después de cada entrega importante y antes de terminar una sesión; luego se debe
@@ -32,7 +32,7 @@ crear commit y hacer push sin incluir secretos.
 - [x] Segunda/tercera revisión arquitectónica sin hallazgos críticos/altos (architect reviewer, 2026-09-16).
 - [x] Base técnica reproducible (Entrega 1; gate local verde el 2026-09-16).
 - [x] Código técnico funcional: health/readiness, configuración, errores, logging, migraciones y UI técnica.
-- [ ] Entrega 2: Identidad, RBAC y Auditoría (implementación ampliada; gates finales pendientes).
+- [x] Entrega 2: Identidad, RBAC y Auditoría.
 
 ## Decisiones oficiales
 
@@ -58,9 +58,11 @@ Rama activa: `delivery/02-identity-rbac-audit`. No iniciar Entrega 3 sin aprobac
 
 Evidencia local fresca del 2026-09-18:
 
-- backend completo sobre PostgreSQL 16 real: 95 pruebas, cobertura 86,21 %, Ruff y Mypy verdes;
-- integración administrativa: login de administrador, permisos, creación de usuario y auditoría funcional verificados;
-- frontend: ESLint, TypeScript y build Next.js verdes; Vitest bloqueado antes de cargar por acceso denegado a `../..` desde esbuild;
+- backend completo sobre PostgreSQL 16 real: 95 pruebas, cobertura 86,24 %, Ruff, formato y Mypy verdes;
+- integración administrativa: login, RBAC, creación/desactivación de usuarios, revocación de sesiones, roles y auditoría verificados;
+- frontend: ESLint, TypeScript y build Next.js verdes; Vitest quedó escrito y delegado al PowerShell externo por acceso denegado a `../..` desde esbuild;
+- migración PostgreSQL desde base vacía, downgrade/upgrade y health checks verdes;
+- `pip-audit` (caché `.cache/pip-audit`), `npm audit --audit-level=high` y búsqueda de secretos sin hallazgos reales;
 
 - clean install: CPython 3.13.15/79 paquetes y npm/471 paquetes desde lockfiles;
 - Alembic: base vacía a `0001_baseline (head)` y roundtrip validado;
@@ -101,17 +103,13 @@ Ninguno de estos riesgos impide construir la base técnica o Identidad; deben re
 
 ## Verificación de continuidad — 2026-09-17
 
-La revisión independiente confirma que la rama contiene autenticación con sesiones opacas,
-Argon2id, migración, bootstrap idempotente y eventos de seguridad. La Entrega 2 no queda
-cerrada: faltan los endpoints administrativos de RBAC/auditoría (`/api/v1/users`,
-`/api/v1/roles`, `/api/v1/permissions` y `/api/v1/audit-events`) y la UI de identidad
-descrita en el plan.
+La revisión independiente confirmó y se corrigieron los riesgos de revocación al desactivar
+usuarios, auditoría de lecturas/denegaciones, snapshots de roles y uso directo de la URL interna
+desde el navegador. La superficie administrativa incluye usuarios, roles, permisos y auditoría;
+la UI usa un proxy same-origin server-side.
 
-El gate PostgreSQL tampoco pudo completarse en este entorno. El servidor local accesible
-en `127.0.0.1:5432` no terminó la conexión async y el PostgreSQL 16.14 autocontenido no
-pudo iniciar por la restricción de tokens de Windows. No se sustituyó PostgreSQL por SQLite
-ni se redujo cobertura o seguridad; la suite de integración y cobertura global quedan
-pendientes de un entorno PostgreSQL operativo.
+El gate PostgreSQL se completó sobre `127.0.0.1:55432` con PostgreSQL 16 real. No se
+sustituyó PostgreSQL por SQLite ni se redujo cobertura o seguridad.
 
 El commit local de este registro también quedó bloqueado porque Git no puede crear
 `.git/worktrees/delivery-02-identity-rbac-audit/index.lock` bajo las restricciones de

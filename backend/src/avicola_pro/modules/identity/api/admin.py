@@ -12,6 +12,8 @@ from avicola_pro.modules.identity.application.authentication import (
     AuthenticationService,
     CsrfValidationError,
     InvalidSessionError,
+    SecurityEventData,
+    SecurityEventWriter,
     SessionReuseError,
     UserAccount,
 )
@@ -66,6 +68,20 @@ class RoleResponse(BaseModel):
     is_active: bool
 
 
+class CreateRoleRequest(StrictRequest):
+    code: str = Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class RoleStatusRequest(StrictRequest):
+    is_active: bool
+
+
+class ReplacePermissionsRequest(StrictRequest):
+    permission_ids: list[UUID] = Field(max_length=64)
+
+
 class PermissionResponse(BaseModel):
     id: UUID
     key: str
@@ -94,6 +110,7 @@ def build_admin_router(
     authentication: AuthenticationService,
     authorization: AuthorizationPort,
     administration: AdministrationPort,
+    security_events: SecurityEventWriter,
     settings: Settings,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["identity-administration"])
@@ -110,6 +127,16 @@ def build_admin_router(
     def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
         async def dependency(user: Annotated[UserAccount, Depends(current_user)], request: Request) -> UserAccount:
             if not await authorization.has_permission(user.id, permission):
+                await security_events.write(
+                    SecurityEventData(
+                        actor_user_id=user.id,
+                        actor_username=user.username,
+                        event_type="authorization.denied",
+                        outcome="DENIED",
+                        context=request_context(request),
+                        metadata={"permission": permission, "resource_type": "identity_admin"},
+                    )
+                )
                 raise ForbiddenError(code="permission_denied", detail="Permission denied")
             return user
 
@@ -218,6 +245,46 @@ def build_admin_router(
             total=total,
         )
 
+    @router.post("/roles", response_model=RoleResponse, status_code=201)
+    async def create_role(
+        payload: CreateRoleRequest,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("roles.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_guard)],
+    ) -> RoleResponse:
+        created = await administration.create_role(
+            actor=user,
+            context=request_context(request),
+            code=payload.code,
+            name=payload.name,
+            description=payload.description,
+        )
+        return RoleResponse.model_validate(created, from_attributes=True)
+
+    @router.patch("/roles/{role_id}/status", status_code=204)
+    async def set_role_status(
+        role_id: UUID,
+        payload: RoleStatusRequest,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("roles.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_guard)],
+    ) -> None:
+        await administration.set_role_status(
+            actor=user, context=request_context(request), role_id=role_id, is_active=payload.is_active
+        )
+
+    @router.put("/roles/{role_id}/permissions", status_code=204)
+    async def replace_role_permissions(
+        role_id: UUID,
+        payload: ReplacePermissionsRequest,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("roles.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_guard)],
+    ) -> None:
+        await administration.replace_role_permissions(
+            actor=user, context=request_context(request), role_id=role_id, permission_ids=payload.permission_ids
+        )
+
     @router.get("/permissions", response_model=Page[PermissionResponse])
     async def list_permissions(
         user: Annotated[UserAccount, Depends(require("roles.manage"))],
@@ -235,11 +302,12 @@ def build_admin_router(
 
     @router.get("/audit-events", response_model=Page[AuditResponse])
     async def list_audit_events(
+        request: Request,
         user: Annotated[UserAccount, Depends(require("audit.read"))],
         offset: int = Query(default=0, ge=0, le=100_000),
         limit: int = Query(default=50, ge=1, le=100),
     ) -> Page[AuditResponse]:
-        del user
+        await administration.record_audit_read(actor=user, context=request_context(request))
         items, total = await administration.list_audit_events(offset=offset, limit=limit)
         return Page(
             items=[AuditResponse.model_validate(item, from_attributes=True) for item in items],

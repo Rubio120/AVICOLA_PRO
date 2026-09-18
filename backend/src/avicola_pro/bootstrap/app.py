@@ -87,7 +87,15 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
         )
         authorization = SQLAlchemyAuthorizationService(session_factory)
         application.state.authorization = authorization
-        application.include_router(build_admin_router(authentication, authorization, administration, resolved_settings))
+        application.include_router(
+            build_admin_router(
+                authentication,
+                authorization,
+                administration,
+                SQLAlchemySecurityEventWriter(session_factory),
+                resolved_settings,
+            )
+        )
         application.add_middleware(
             ForcedPasswordChangeMiddleware,
             service=authentication,

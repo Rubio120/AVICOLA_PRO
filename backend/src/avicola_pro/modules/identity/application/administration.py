@@ -37,9 +37,23 @@ class AdministrationPort(Protocol):
 
     async def list_roles(self, *, offset: int, limit: int) -> tuple[Sequence[object], int]: ...
 
+    async def create_role(
+        self, *, actor: UserAccount, context: RequestContext, code: str, name: str, description: str | None
+    ) -> object: ...
+
+    async def set_role_status(
+        self, *, actor: UserAccount, context: RequestContext, role_id: UUID, is_active: bool
+    ) -> None: ...
+
+    async def replace_role_permissions(
+        self, *, actor: UserAccount, context: RequestContext, role_id: UUID, permission_ids: list[UUID]
+    ) -> None: ...
+
     async def list_permissions(self, *, offset: int, limit: int) -> tuple[Sequence[object], int]: ...
 
     async def list_audit_events(self, *, offset: int, limit: int) -> tuple[list[AuditSummary], int]: ...
+
+    async def record_audit_read(self, *, actor: UserAccount, context: RequestContext) -> None: ...
 
     async def create_user(
         self,

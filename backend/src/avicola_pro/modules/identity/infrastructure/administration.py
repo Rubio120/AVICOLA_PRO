@@ -3,14 +3,21 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from avicola_pro.modules.audit.application.writer import AuditRecord, FunctionalAuditWriter
 from avicola_pro.modules.identity.application.administration import AuditSummary, UserSummary
 from avicola_pro.modules.identity.application.authentication import RequestContext, UserAccount
 from avicola_pro.modules.identity.application.credentials import Argon2PasswordService
-from avicola_pro.modules.identity.infrastructure.models import Permission, Role, User, UserRole
+from avicola_pro.modules.identity.infrastructure.models import (
+    Permission,
+    Role,
+    RolePermission,
+    Session,
+    User,
+    UserRole,
+)
 from avicola_pro.shared.api.errors import ConflictError
 
 
@@ -39,6 +46,16 @@ class SQLAlchemyAdministrationService:
         }
 
     @staticmethod
+    def _role_snapshot(role: Role) -> dict[str, object]:
+        return {
+            "code": role.code,
+            "name": role.name,
+            "description": role.description,
+            "is_system": role.is_system,
+            "is_active": role.is_active,
+        }
+
+    @staticmethod
     def _audit(
         *,
         actor: UserAccount,
@@ -47,6 +64,7 @@ class SQLAlchemyAdministrationService:
         resource_id: UUID | None,
         before: dict[str, object] | None,
         after: dict[str, object] | None,
+        resource_type: str = "user",
     ) -> AuditRecord:
         try:
             correlation_id = UUID(context.correlation_id)
@@ -56,7 +74,7 @@ class SQLAlchemyAdministrationService:
             actor_user_id=actor.id,
             actor_username=actor.username,
             action=action,
-            resource_type="user",
+            resource_type=resource_type,
             resource_id=str(resource_id) if resource_id else None,
             correlation_id=correlation_id,
             ip_address=context.ip_address,
@@ -104,6 +122,93 @@ class SQLAlchemyAdministrationService:
                 (await session.scalars(select(Permission).order_by(Permission.key).offset(offset).limit(limit))).all()
             ), total
 
+    async def create_role(
+        self, *, actor: UserAccount, context: RequestContext, code: str, name: str, description: str | None
+    ) -> Role:
+        role = Role(id=uuid4(), code=code.strip().casefold(), name=name.strip(), description=description)
+        async with self._session_factory() as session, session.begin():
+            if await session.scalar(select(Role.id).where(Role.code == role.code)) is not None:
+                raise ConflictError(code="role_already_exists", detail="Role code already exists")
+            session.add(role)
+            await session.flush()
+            self._audit_writer.add(
+                session,
+                self._audit(
+                    actor=actor,
+                    context=context,
+                    action="roles.create",
+                    resource_type="role",
+                    resource_id=role.id,
+                    before=None,
+                    after=self._role_snapshot(role),
+                ),
+            )
+        return role
+
+    async def set_role_status(
+        self, *, actor: UserAccount, context: RequestContext, role_id: UUID, is_active: bool
+    ) -> None:
+        async with self._session_factory() as session, session.begin():
+            role = await session.scalar(select(Role).where(Role.id == role_id).with_for_update())
+            if role is None:
+                raise ConflictError(code="role_not_found", detail="Role not found")
+            if role.is_system and not is_active:
+                raise ConflictError(code="system_role", detail="System roles cannot be deactivated")
+            before = self._role_snapshot(role)
+            role.is_active = is_active
+            role.updated_at = datetime.now(UTC)
+            self._audit_writer.add(
+                session,
+                self._audit(
+                    actor=actor,
+                    context=context,
+                    action="roles.status_changed",
+                    resource_type="role",
+                    resource_id=role.id,
+                    before=before,
+                    after=self._role_snapshot(role),
+                ),
+            )
+
+    async def replace_role_permissions(
+        self, *, actor: UserAccount, context: RequestContext, role_id: UUID, permission_ids: list[UUID]
+    ) -> None:
+        async with self._session_factory() as session, session.begin():
+            role = await session.scalar(select(Role).where(Role.id == role_id).with_for_update())
+            if role is None:
+                raise ConflictError(code="role_not_found", detail="Role not found")
+            if role.is_system:
+                raise ConflictError(code="system_role", detail="System role permissions are immutable")
+            permissions = (await session.scalars(select(Permission).where(Permission.id.in_(permission_ids)))).all()
+            if len(permissions) != len(set(permission_ids)):
+                raise ConflictError(code="permission_not_found", detail="One or more permissions are unavailable")
+            current = (
+                await session.scalars(
+                    select(Permission.key)
+                    .join(RolePermission, RolePermission.permission_id == Permission.id)
+                    .where(RolePermission.role_id == role.id)
+                )
+            ).all()
+            await session.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
+            session.add_all(
+                [
+                    RolePermission(role_id=role.id, permission_id=permission.id, assigned_by_user_id=actor.id)
+                    for permission in permissions
+                ]
+            )
+            self._audit_writer.add(
+                session,
+                self._audit(
+                    actor=actor,
+                    context=context,
+                    action="roles.permissions_replaced",
+                    resource_type="role",
+                    resource_id=role.id,
+                    before={"permission_key": ",".join(sorted(current))},
+                    after={"permission_key": ",".join(sorted(permission.key for permission in permissions))},
+                ),
+            )
+
     async def list_audit_events(self, *, offset: int, limit: int) -> tuple[list[AuditSummary], int]:
         async with self._session_factory() as session:
             total = int(await session.scalar(text("select count(id) from audit_events")) or 0)
@@ -130,6 +235,21 @@ class SQLAlchemyAdministrationService:
                 )
                 for event in events
             ], total
+
+    async def record_audit_read(self, *, actor: UserAccount, context: RequestContext) -> None:
+        async with self._session_factory() as session, session.begin():
+            self._audit_writer.add(
+                session,
+                self._audit(
+                    actor=actor,
+                    context=context,
+                    action="audit.read",
+                    resource_type="audit_event",
+                    resource_id=None,
+                    before=None,
+                    after=None,
+                ),
+            )
 
     async def create_user(
         self,
@@ -200,6 +320,12 @@ class SQLAlchemyAdministrationService:
                     )
             user.status = status
             user.updated_at = now
+            if status == "INACTIVE":
+                await session.execute(
+                    update(Session)
+                    .where(Session.user_id == user.id, Session.revoked_at.is_(None))
+                    .values(revoked_at=now, revocation_reason="user_deactivated")
+                )
             self._audit_writer.add(
                 session,
                 self._audit(
@@ -222,6 +348,11 @@ class SQLAlchemyAdministrationService:
             roles = (await session.scalars(select(Role).where(Role.id.in_(role_ids), Role.is_active.is_(True)))).all()
             if len(roles) != len(set(role_ids)):
                 raise ConflictError(code="role_not_found", detail="One or more roles are unavailable")
+            current_roles = (
+                await session.scalars(
+                    select(Role.code).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == user.id)
+                )
+            ).all()
             current_admin = await session.scalar(
                 select(func.count(UserRole.user_id))
                 .join(Role, Role.id == UserRole.role_id)
@@ -249,7 +380,7 @@ class SQLAlchemyAdministrationService:
                     context=context,
                     action="users.roles_replaced",
                     resource_id=user.id,
-                    before=None,
-                    after={"user_id": str(user.id)},
+                    before={"user_id": str(user.id), "roles": ",".join(sorted(current_roles))},
+                    after={"user_id": str(user.id), "roles": ",".join(sorted(role.code for role in roles))},
                 ),
             )

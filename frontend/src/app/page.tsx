@@ -22,7 +22,7 @@ export default async function HomePage() {
         <SystemStatus available={health.available} />
         <p className="scope-note">Entrega 2 · Identidad, RBAC y auditoría base</p>
       </section>
-      <IdentityPanel />
+      <IdentityPanel apiBaseUrl="" />
     </main>
   );
 }
