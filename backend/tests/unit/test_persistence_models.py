@@ -44,6 +44,14 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "inventory_movements",
         "inventory_balances",
         "inventory_cost_variances",
+        "flocks",
+        "flock_house_assignments",
+        "flock_balances",
+        "bird_movement_events",
+        "mortality_events",
+        "bird_adjustment_events",
+        "flock_daily_records",
+        "feed_consumption",
     }
 
 

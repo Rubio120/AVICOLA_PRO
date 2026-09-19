@@ -367,6 +367,25 @@ servidor accesible en `127.0.0.1:5432` no completó la conexión async y el Post
 autocontenido no pudo arrancar por la restricción de tokens de Windows. No se utilizó SQLite,
 no se redujeron gates y no se alteraron datos reales.
 
+## Continuidad posterior — 2026-09-19
+
+La primera entrega pendiente fue la Entrega 5 — Producción avícola, porque las Entregas 2, 3 y 4
+ya estaban implementadas y cerradas en el working tree. La Entrega 5 quedó implementada sin
+commit ni push.
+
+Se añadió la migración `0005_production` y modelos para lotes, asignaciones, saldos, eventos de
+movimiento, mortalidad, ajustes, observaciones diarias y consumo de alimento. El servicio usa
+locks PostgreSQL, activación idempotente con un único INITIAL, invariantes de aves no negativas,
+capacidad de galpones, cierre condicionado a saldo cero y consumo de alimento dentro de la misma
+UoW que la salida de inventario. La API queda protegida por sesión opaca, CSRF y RBAC; la UI
+incluye consulta de saldos y estados seguros.
+
+Gate local fresco: PostgreSQL 16 real en `127.0.0.1:55432`, migración desde base vacía y
+roundtrip, 118 pruebas backend con cobertura 80,05 %, Ruff/formato/Mypy y reglas arquitectónicas
+verdes; ESLint, TypeScript y build frontend verdes. Vitest queda delegado al PowerShell externo
+por el PermissionError ambiental conocido de esbuild contra rutas padre de `C:\Users`.
+No se hizo commit, push, reset ni se alteraron datos reales. No se inició la Entrega 6.
+
 ## Fuentes oficiales relacionadas
 
 ## Continuidad - cierre Entrega 3, 2026-09-18

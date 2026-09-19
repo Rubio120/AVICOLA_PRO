@@ -44,6 +44,8 @@ def clean_database() -> Iterator[None]:
         cursor.execute(
             "truncate table security_events, audit_events, sessions, user_roles, "
             "role_permissions, inventory_cost_variances, inventory_movements, "
+            "feed_consumption, flock_daily_records, bird_adjustment_events, mortality_events, "
+            "bird_movement_events, flock_balances, flock_house_assignments, flocks, "
             "inventory_document_lines, inventory_documents, inventory_balances, inventory_lots, "
             "users, document_sequences, products restart identity"
         )

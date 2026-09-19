@@ -30,6 +30,8 @@ BASE_PERMISSION_KEYS = (
     "cash.closings.execute",
     "production.mortality.record",
     "production.feed.record",
+    "production.flocks.manage",
+    "production.adjustments.approve",
     "costs.recalculate",
     "reports.profitability.read",
     "reports.export",

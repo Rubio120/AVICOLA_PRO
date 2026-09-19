@@ -6,6 +6,9 @@
 
 ## Estado global
 
+**Actualización 2026-09-19:** Entrega 5 (Producción avícola) completada y revalidada en este
+working tree. No se inició la Entrega 6.
+
 **ActualizaciÃ³n 2026-09-18:** Entrega 3 (ConfiguraciÃ³n, terceros y catÃ¡logo) completada en
 working tree y revalidada. No iniciar Entrega 4 en esta ejecuciÃ³n.
 
@@ -36,6 +39,23 @@ crear commit y hacer push sin incluir secretos.
 - [x] Base técnica reproducible (Entrega 1; gate local verde el 2026-09-16).
 - [x] Código técnico funcional: health/readiness, configuración, errores, logging, migraciones y UI técnica.
 - [x] Entrega 2: Identidad, RBAC y Auditoría.
+- [x] Entrega 3: Configuración, terceros y catálogo.
+- [x] Entrega 4: Inventario transaccional.
+- [x] Entrega 5: Producción avícola.
+
+## Cierre autoritativo de Entrega 5 — 2026-09-19
+
+La primera entrega pendiente fue la Entrega 5 — Producción avícola. Se implementó la migración
+PostgreSQL `0005_production`, lotes y asignaciones a galpones, saldo bloqueable de aves, eventos
+INITIAL/mortalidad/ajuste, registros diarios, cierre autorizado y consumo de alimento integrado
+atómicamente con el ledger de inventario. La API aplica sesión, CSRF y RBAC; la UI muestra saldos
+de lotes con estados seguros.
+
+Evidencia fresca: PostgreSQL 16 real en `127.0.0.1:55432`, migración limpia y roundtrip, 118
+pruebas backend, cobertura 80,05 %, Ruff/formato/Mypy y arquitectura verdes; ESLint, TypeScript
+y build frontend verdes. Vitest está correctamente escrito pero delegado al PowerShell externo
+por el `PermissionError` conocido de esbuild al leer rutas padre de `C:\Users`. No se inició la
+Entrega 6.
 
 ## Decisiones oficiales
 

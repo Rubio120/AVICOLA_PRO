@@ -1,6 +1,7 @@
 import { IdentityPanel } from "@/components/identity-panel";
 import { CatalogPanel } from "@/components/catalog-panel";
 import { InventoryPanel } from "@/components/inventory-panel";
+import { ProductionPanel } from "@/components/production-panel";
 import { SystemStatus } from "@/components/system-status";
 import { getBackendHealth } from "@/lib/api/health";
 import { getServerEnv } from "@/lib/env";
@@ -22,11 +23,12 @@ export default async function HomePage() {
           Plataforma empresarial preparada para iniciar la implementación modular de forma segura y trazable.
         </p>
         <SystemStatus available={health.available} />
-        <p className="scope-note">Entrega 4 · Inventario transaccional</p>
+        <p className="scope-note">Entrega 5 · Producción avícola</p>
       </section>
       <IdentityPanel apiBaseUrl="" />
       <CatalogPanel />
       <InventoryPanel />
+      <ProductionPanel />
     </main>
   );
 }
