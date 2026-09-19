@@ -12,8 +12,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from avicola_pro.modules.settings.domain.rules import validate_validity_range
-from avicola_pro.shared.api.errors import ForbiddenError, UnauthorizedError
+from avicola_pro.modules.settings.domain.rules import (
+    format_sequence_number,
+    normalize_code,
+    validate_tax_rate,
+    validate_validity_range,
+)
+from avicola_pro.shared.api.errors import ConflictError, ForbiddenError, UnauthorizedError
 from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 _identity = import_module("avicola_pro.modules.identity.application.authentication")
@@ -29,6 +34,7 @@ UserAccount: Any = _identity.UserAccount
 AuthorizationPort: Any = _authorization.AuthorizationPort
 CompanyProfile: Any = _settings_models.CompanyProfile
 TaxRate: Any = _settings_models.TaxRate
+DocumentSequence: Any = _settings_models.DocumentSequence
 Customer: Any = _party_models.Customer
 Supplier: Any = _party_models.Supplier
 Product: Any = _catalog_models.Product
@@ -86,6 +92,13 @@ class ProductPayload(StrictRequest):
     category_id: UUID | None = None
     tracks_lot: bool = False
     tracks_expiration: bool = False
+
+
+class SequencePayload(StrictRequest):
+    document_type: str = Field(min_length=1, max_length=64)
+    series: str = Field(min_length=1, max_length=16)
+    prefix: str = Field(default="", max_length=16)
+    padding: int = Field(default=7, ge=1, le=18)
 
 
 def build_settings_router(
@@ -203,13 +216,56 @@ def build_settings_router(
     ) -> TaxRate:
         try:
             validate_validity_range(payload.valid_from, payload.valid_to)
+            rate = validate_tax_rate(payload.rate)
         except ValueError as exc:
             raise ForbiddenError(code="invalid_validity", detail=str(exc)) from exc
         async with database.session_factory() as session, session.begin():
-            item = TaxRate(id=uuid4(), **payload.model_dump())
+            item = TaxRate(id=uuid4(), **payload.model_dump(exclude={"rate"}), rate=rate)
             session.add(item)
             await add_audit(session, user, request, "settings.tax_rate.create", "tax_rate", str(item.id))
             return item
+
+    @router.post("/document-sequences", response_model=None, status_code=201)
+    async def create_sequence(
+        payload: SequencePayload,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("settings.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_user)],
+    ) -> DocumentSequence:
+        try:
+            document_type = normalize_code(payload.document_type)
+            series = normalize_code(payload.series)
+        except ValueError as exc:
+            raise ForbiddenError(code="invalid_sequence", detail=str(exc)) from exc
+        async with database.session_factory() as session, session.begin():
+            item = DocumentSequence(
+                id=uuid4(),
+                document_type=document_type,
+                series=series,
+                prefix=payload.prefix,
+                padding=payload.padding,
+            )
+            session.add(item)
+            await add_audit(session, user, request, "settings.sequence.create", "document_sequence", str(item.id))
+            return item
+
+    @router.post("/document-sequences/{sequence_id}/next", response_model=None)
+    async def consume_sequence(
+        sequence_id: UUID,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("settings.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_user)],
+    ) -> dict[str, object]:
+        async with database.session_factory() as session, session.begin():
+            item = await session.scalar(
+                select(DocumentSequence).where(DocumentSequence.id == sequence_id).with_for_update()
+            )
+            if item is None or not item.is_active:
+                raise ForbiddenError(code="sequence_unavailable", detail="Sequence is unavailable")
+            item.current_number += 1
+            value = format_sequence_number(item.prefix, item.current_number, item.padding)
+            await add_audit(session, user, request, "settings.sequence.consume", "document_sequence", str(item.id))
+            return {"id": item.id, "number": item.current_number, "formatted": value}
 
     @router.get("/parties/{party_type}")
     async def list_parties(
@@ -249,6 +305,10 @@ def build_settings_router(
         if model is None:
             raise ForbiddenError(code="invalid_party_type", detail="Unknown party type")
         values = payload.model_dump()
+        try:
+            values["code"] = normalize_code(str(values["code"]))
+        except ValueError as exc:
+            raise ForbiddenError(code="invalid_code", detail=str(exc)) from exc
         if model is Customer:
             values["contacts"] = {}
             values["credit_limit"] = 0
@@ -288,7 +348,11 @@ def build_settings_router(
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> ProductCategory:
         async with database.session_factory() as session, session.begin():
-            item = ProductCategory(id=uuid4(), code=payload.code.casefold(), name=payload.name)
+            try:
+                code = normalize_code(payload.code)
+            except ValueError as exc:
+                raise ForbiddenError(code="invalid_code", detail=str(exc)) from exc
+            item = ProductCategory(id=uuid4(), code=code, name=payload.name)
             session.add(item)
             await add_audit(session, user, request, "catalog.category.create", "product_category", str(item.id))
             return item
@@ -316,10 +380,56 @@ def build_settings_router(
         user: Annotated[UserAccount, Depends(require("catalog.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> Product:
+        try:
+            sku = normalize_code(payload.sku)
+        except ValueError as exc:
+            raise ForbiddenError(code="invalid_code", detail=str(exc)) from exc
         async with database.session_factory() as session, session.begin():
-            item = Product(id=uuid4(), **payload.model_dump())
+            item = Product(id=uuid4(), sku=sku, **payload.model_dump(exclude={"sku"}))
             session.add(item)
             await add_audit(session, user, request, "catalog.product.create", "product", str(item.id))
+            return item
+
+    @router.patch("/catalog/products/{product_id}", response_model=None)
+    async def update_product(
+        product_id: UUID,
+        payload: ProductPayload,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_user)],
+        version: int = Query(..., ge=1),
+    ) -> Product:
+        async with database.session_factory() as session, session.begin():
+            item = await session.scalar(select(Product).where(Product.id == product_id).with_for_update())
+            if item is None:
+                raise ForbiddenError(code="not_found", detail="Product not found")
+            if item.version != version:
+                raise ConflictError(code="version_conflict", detail="The product changed; reload it")
+            values = payload.model_dump()
+            try:
+                values["sku"] = normalize_code(values["sku"])
+            except ValueError as exc:
+                raise ForbiddenError(code="invalid_code", detail=str(exc)) from exc
+            for key, value in values.items():
+                setattr(item, key, value)
+            item.version += 1
+            await add_audit(session, user, request, "catalog.product.update", "product", str(item.id))
+            return item
+
+    @router.post("/catalog/products/{product_id}/deactivate", response_model=None)
+    async def deactivate_product(
+        product_id: UUID,
+        request: Request,
+        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        _: Annotated[UserAccount, Depends(csrf_user)],
+    ) -> Product:
+        async with database.session_factory() as session, session.begin():
+            item = await session.scalar(select(Product).where(Product.id == product_id).with_for_update())
+            if item is None:
+                raise ForbiddenError(code="not_found", detail="Product not found")
+            item.is_active = False
+            item.version += 1
+            await add_audit(session, user, request, "catalog.product.deactivate", "product", str(item.id))
             return item
 
     return router

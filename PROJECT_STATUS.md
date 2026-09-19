@@ -6,6 +6,9 @@
 
 ## Estado global
 
+**ActualizaciÃ³n 2026-09-18:** Entrega 3 (ConfiguraciÃ³n, terceros y catÃ¡logo) completada en
+working tree y revalidada. No iniciar Entrega 4 en esta ejecuciÃ³n.
+
 **Entrega 2 / Identidad, RBAC y Auditoría completada.** La Entrega 1 permanece cerrada y
 respaldada. La autenticación/sesiones se amplió con administración protegida de usuarios,
 roles y permisos, auditoría funcional transaccional, eventos de seguridad y una UI de identidad
@@ -100,6 +103,17 @@ Evidencia documental actual: documentos de arquitectura y continuidad, verificac
 Ninguno de estos riesgos impide construir la base técnica o Identidad; deben resolverse antes de la fase afectada.
 
 ## Protocolo de continuidad
+
+## Cierre de Entrega 3 - 2026-09-18
+
+La Entrega 3 quedÃ³ implementada y revalidada sin commit ni push. Se reforzaron constraints,
+normalizaciÃ³n de cÃ³digos, secuencias PostgreSQL bajo lock, optimistic locking y desactivaciÃ³n
+auditable de productos, junto con la API protegida y el panel de catÃ¡logo.
+
+Gates frescos: 103 pruebas backend, cobertura 81,26 %, Ruff/formato/Mypy, migraciÃ³n limpia y
+roundtrip PostgreSQL 16 real, health checks, ESLint, TypeScript, build, pip-audit y npm audit.
+Vitest queda delegado al PowerShell externo por el PermissionError conocido de esbuild contra
+rutas padre de C:\Users. No se iniciÃ³ la Entrega 4.
 
 ## Verificación de Entrega 3 - 2026-09-18
 

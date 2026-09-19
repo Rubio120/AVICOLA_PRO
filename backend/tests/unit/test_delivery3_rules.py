@@ -41,3 +41,12 @@ def test_sequence_number_is_padded_and_never_reuses_zero() -> None:
     assert format_sequence_number("FAC", 1, 7) == "FAC0000001"
     with pytest.raises(ValueError, match="positive"):
         format_sequence_number("FAC", 0, 7)
+
+
+def test_sequence_number_rejects_unsafe_padding() -> None:
+    with pytest.raises(ValueError, match="padding"):
+        format_sequence_number("FAC", 1, 19)
+
+
+def test_tax_rate_is_quantized_to_database_precision() -> None:
+    assert validate_tax_rate(Decimal("0.1234567")) == Decimal("0.123457")

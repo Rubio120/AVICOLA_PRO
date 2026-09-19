@@ -348,6 +348,13 @@ no se redujeron gates y no se alteraron datos reales.
 
 ## Fuentes oficiales relacionadas
 
+## Continuidad - cierre Entrega 3, 2026-09-18
+
+La Entrega 3 fue revalidada en el working tree. La suite fresca pasÃ³ 103 pruebas con 81,26 %
+de cobertura sobre PostgreSQL real; Ruff, Mypy, frontend y build quedaron verdes. Vitest queda
+delegado al PowerShell externo por la restricciÃ³n ambiental conocida. No se hizo commit, push ni
+se iniciÃ³ la Entrega 4.
+
 ## Continuidad autoritativa - 2026-09-18
 
 La Entrega 3 es la entrega trabajada en este checkpoint del working tree. La migración `0003_settings_parties_catalog` y sus modelos cubren configuración, terceros, catálogo, granjas, galpones y depósitos sobre PostgreSQL real. La API exige sesión, CSRF, RBAC y auditoría; la UI usa el BFF same-origin. La suite backend pasó 100 tests con 81.58 % de cobertura; Ruff, formato, Mypy, ESLint, TypeScript y build pasaron. Vitest queda delegado al PowerShell externo únicamente por el `PermissionError` ambiental de esbuild al leer rutas padre de `C:\Users`.

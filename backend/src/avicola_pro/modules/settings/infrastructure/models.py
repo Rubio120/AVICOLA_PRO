@@ -42,6 +42,7 @@ class CompanyProfile(Base):
 
 class Currency(Base):
     __tablename__ = "currencies"
+    __table_args__ = (CheckConstraint("decimals between 0 and 6", name="currency_decimals_range"),)
     code: Mapped[str] = mapped_column(String(3), primary_key=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     decimals: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("2"))
@@ -57,6 +58,7 @@ class PaymentMethod(Base):
 
 class UnitOfMeasure(Base):
     __tablename__ = "units_of_measure"
+    __table_args__ = (CheckConstraint("precision between 0 and 9", name="unit_precision_range"),)
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     precision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("4"))
@@ -92,7 +94,11 @@ class Stamp(Base):
 
 class DocumentSequence(Base):
     __tablename__ = "document_sequences"
-    __table_args__ = (UniqueConstraint("document_type", "series", name="uq_document_sequences_type_series"),)
+    __table_args__ = (
+        UniqueConstraint("document_type", "series", name="uq_document_sequences_type_series"),
+        CheckConstraint("current_number >= 0", name="current_number_nonnegative"),
+        CheckConstraint("padding between 1 and 18", name="padding_range"),
+    )
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     document_type: Mapped[str] = mapped_column(String(64), nullable=False)
     series: Mapped[str] = mapped_column(String(16), nullable=False)

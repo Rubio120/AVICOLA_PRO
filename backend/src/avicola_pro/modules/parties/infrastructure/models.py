@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, Numeric, String, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,7 +14,12 @@ from avicola_pro.shared.infrastructure.models import Base
 
 class Customer(Base):
     __tablename__ = "customers"
-    __table_args__ = (Index("ix_customers_name", "name"), UniqueConstraint("code", name="uq_customers_code"))
+    __table_args__ = (
+        Index("ix_customers_name", "name"),
+        UniqueConstraint("code", name="uq_customers_code"),
+        CheckConstraint("credit_limit >= 0", name="credit_limit_nonnegative"),
+        CheckConstraint("payment_term_days >= 0", name="customer_payment_term_nonnegative"),
+    )
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     document_type: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -30,7 +35,11 @@ class Customer(Base):
 
 class Supplier(Base):
     __tablename__ = "suppliers"
-    __table_args__ = (Index("ix_suppliers_name", "name"), UniqueConstraint("code", name="uq_suppliers_code"))
+    __table_args__ = (
+        Index("ix_suppliers_name", "name"),
+        UniqueConstraint("code", name="uq_suppliers_code"),
+        CheckConstraint("payment_term_days >= 0", name="supplier_payment_term_nonnegative"),
+    )
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     document_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'RUC'"))

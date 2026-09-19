@@ -2,8 +2,8 @@
 
 from uuid import UUID
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0003_settings_parties_catalog"
@@ -33,6 +33,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(80), nullable=False),
         sa.Column("decimals", sa.Integer(), nullable=False, server_default="2"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.CheckConstraint("decimals between 0 and 6", name="currency_decimals_range"),
     )
     op.create_table(
         "units_of_measure",
@@ -40,6 +41,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(80), nullable=False),
         sa.Column("precision", sa.Integer(), nullable=False, server_default="4"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.CheckConstraint("precision between 0 and 9", name="unit_precision_range"),
     )
     op.create_table(
         "tax_rates",
@@ -75,6 +77,7 @@ def upgrade() -> None:
         sa.Column("stamp_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("stamps.id", ondelete="RESTRICT")),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.CheckConstraint("current_number >= 0", name="current_number_nonnegative"),
+        sa.CheckConstraint("padding between 1 and 18", name="padding_range"),
         sa.UniqueConstraint("document_type", "series", name="uq_document_sequences_type_series"),
     )
     op.create_table(
@@ -96,6 +99,8 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.CheckConstraint("credit_limit >= 0", name="credit_limit_nonnegative"),
+        sa.CheckConstraint("payment_term_days >= 0", name="customer_payment_term_nonnegative"),
     )
     op.create_table(
         "suppliers",
@@ -109,6 +114,7 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.CheckConstraint("payment_term_days >= 0", name="supplier_payment_term_nonnegative"),
     )
     op.create_table(
         "product_categories",
@@ -175,12 +181,14 @@ def upgrade() -> None:
     )
     bind.execute(
         sa.text(
-            "insert into units_of_measure(code,name,precision) values ('unit','Unidad',0),('kg','Kilogramo',4),('l','Litro',4) on conflict do nothing"
+            "insert into units_of_measure(code,name,precision) values "
+            "('unit','Unidad',0),('kg','Kilogramo',4),('l','Litro',4) on conflict do nothing"
         )
     )
     bind.execute(
         sa.text(
-            "insert into payment_methods(code,name) values ('cash','Efectivo'),('bank_transfer','Transferencia bancaria') on conflict do nothing"
+            "insert into payment_methods(code,name) values "
+            "('cash','Efectivo'),('bank_transfer','Transferencia bancaria') on conflict do nothing"
         )
     )
     permission_rows = [
@@ -203,7 +211,9 @@ def upgrade() -> None:
         )
         bind.execute(
             sa.text(
-                "insert into role_permissions(role_id,permission_id) select r.id,p.id from roles r,permissions p where r.code='administrator' and p.key=:key on conflict do nothing"
+                "insert into role_permissions(role_id,permission_id) "
+                "select r.id,p.id from roles r,permissions p "
+                "where r.code='administrator' and p.key=:key on conflict do nothing"
             ),
             {"key": key},
         )

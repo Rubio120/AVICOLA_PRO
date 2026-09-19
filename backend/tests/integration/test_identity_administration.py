@@ -43,7 +43,7 @@ def clean_database() -> Iterator[None]:
     with psycopg.connect(_database_url().replace("+psycopg", "")) as connection, connection.cursor() as cursor:
         cursor.execute(
             "truncate table security_events, audit_events, sessions, user_roles, "
-            "role_permissions, users restart identity"
+            "role_permissions, users, document_sequences, products restart identity"
         )
         cursor.execute(
             "insert into role_permissions (role_id, permission_id) "
@@ -123,3 +123,57 @@ async def test_administrator_can_read_catalog_and_create_audited_user(
     assert audit.status_code == 200
     assert any(item["action"] == "users.create" for item in audit.json()["items"])
     assert any(item["action"] == "audit.read" for item in audit.json()["items"])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_administrator_can_consume_sequence_and_manage_product_lifecycle(
+    context: tuple[DatabaseResources, AsyncClient],
+) -> None:
+    resources, client = context
+    password_service = Argon2PasswordService(PasswordPolicy(12, 128), time_cost=1, memory_cost_kib=8_192, parallelism=1)
+    admin = User(
+        id=uuid4(),
+        username="catalog-admin",
+        email="catalog-admin@example.test",
+        display_name="Catalog Admin",
+        password_hash=password_service.hash(PASSWORD),
+    )
+    async with resources.session_factory() as session, session.begin():
+        session.add(admin)
+        role = await session.scalar(select(Role).where(Role.code == "administrator"))
+        assert role is not None
+        session.add(UserRole(user_id=admin.id, role_id=role.id))
+
+    login = await client.post("/api/v1/auth/login", json={"identity": admin.username, "password": PASSWORD})
+    assert login.status_code == 200
+    csrf = login.headers["x-csrf-token"]
+    headers = {"X-CSRF-Token": csrf}
+    sequence = await client.post(
+        "/api/v1/document-sequences", json={"document_type": "fac", "series": "a01"}, headers=headers
+    )
+    assert sequence.status_code == 201
+    sequence_id = sequence.json()["id"]
+    first = await client.post(f"/api/v1/document-sequences/{sequence_id}/next", headers=headers)
+    second = await client.post(f"/api/v1/document-sequences/{sequence_id}/next", headers=headers)
+    assert first.json()["formatted"] == "0000001"
+    assert second.json()["number"] == 2
+
+    created = await client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "INPUT-01", "name": "Feed", "product_type": "INPUT", "base_unit_code": "kg"},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    product = created.json()
+    updated = await client.patch(
+        f"/api/v1/catalog/products/{product['id']}?version={product['version']}",
+        json={"sku": "INPUT-01", "name": "Feed updated", "product_type": "INPUT", "base_unit_code": "kg"},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    deactivated = await client.post(f"/api/v1/catalog/products/{product['id']}/deactivate", headers=headers)
+    assert deactivated.status_code == 200
+    visible = await client.get("/api/v1/catalog/products")
+    assert visible.status_code == 200
+    assert all(item["id"] != product["id"] for item in visible.json()["items"])
