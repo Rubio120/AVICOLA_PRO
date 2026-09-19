@@ -43,7 +43,9 @@ def clean_database() -> Iterator[None]:
     with psycopg.connect(_database_url().replace("+psycopg", "")) as connection, connection.cursor() as cursor:
         cursor.execute(
             "truncate table security_events, audit_events, sessions, user_roles, "
-            "role_permissions, users, document_sequences, products restart identity"
+            "role_permissions, inventory_cost_variances, inventory_movements, "
+            "inventory_document_lines, inventory_documents, inventory_balances, inventory_lots, "
+            "users, document_sequences, products restart identity"
         )
         cursor.execute(
             "insert into role_permissions (role_id, permission_id) "

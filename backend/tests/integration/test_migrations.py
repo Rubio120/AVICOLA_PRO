@@ -61,6 +61,12 @@ EXPECTED_TABLES = {
     "farms",
     "houses",
     "warehouses",
+    "inventory_lots",
+    "inventory_documents",
+    "inventory_document_lines",
+    "inventory_movements",
+    "inventory_balances",
+    "inventory_cost_variances",
 }
 
 
@@ -78,7 +84,7 @@ def migrated_database() -> None:
 def test_identity_migration_round_trip_on_real_postgresql() -> None:
     current = _run_alembic("current")
 
-    assert "0003_settings_parties_catalog" in current.stdout
+    assert "0004_inventory" in current.stdout
 
     with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
         cursor.execute("select version()")
@@ -94,6 +100,23 @@ def test_identity_migration_round_trip_on_real_postgresql() -> None:
         cursor.execute("select table_name from information_schema.tables where table_schema = 'public'")
         assert {row[0] for row in cursor.fetchall()} == {"alembic_version"}
     _run_alembic("upgrade", "head")
+
+
+@pytest.mark.integration
+def test_inventory_schema_has_reconciliation_indexes_and_append_only_trigger() -> None:
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select indexname from pg_indexes where schemaname = 'public'")
+        indexes = {row[0] for row in cursor.fetchall()}
+        assert {
+            "ix_inventory_movements_bucket_occurred",
+            "ix_inventory_movements_source",
+            "uq_inventory_movements_reversal",
+            "uq_inventory_balances_bucket",
+        } <= indexes
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid = 'inventory_movements'::regclass and not tgisinternal"
+        )
+        assert "trg_inventory_movements_append_only" in {row[0] for row in cursor.fetchall()}
 
 
 @pytest.mark.integration

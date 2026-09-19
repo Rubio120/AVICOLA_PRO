@@ -38,6 +38,12 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "farms",
         "houses",
         "warehouses",
+        "inventory_lots",
+        "inventory_documents",
+        "inventory_document_lines",
+        "inventory_movements",
+        "inventory_balances",
+        "inventory_cost_variances",
     }
 
 

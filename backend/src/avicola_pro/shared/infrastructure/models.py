@@ -31,3 +31,4 @@ def load_persistence_models() -> None:
     import_module("avicola_pro.modules.settings.infrastructure.models")
     import_module("avicola_pro.modules.parties.infrastructure.models")
     import_module("avicola_pro.modules.catalog.infrastructure.models")
+    import_module("avicola_pro.modules.inventory.infrastructure.models")

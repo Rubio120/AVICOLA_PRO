@@ -21,6 +21,7 @@ from avicola_pro.modules.identity.infrastructure.authentication import (
     SQLAlchemyAuthenticationRepository,
 )
 from avicola_pro.modules.identity.infrastructure.authorization import SQLAlchemyAuthorizationService
+from avicola_pro.modules.inventory.api.routes import build_inventory_router
 from avicola_pro.modules.settings.api.routes import build_settings_router
 from avicola_pro.shared.api.error_handlers import install_error_handlers
 from avicola_pro.shared.api.health import router as health_router
@@ -106,6 +107,15 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
         application.include_router(build_auth_router(authentication, resolved_settings))
         application.include_router(
             build_settings_router(
+                authentication,
+                authorization,
+                cast(DatabaseResources, database_resources),
+                SQLAlchemyFunctionalAuditWriter(),
+                resolved_settings.session_cookie_name,
+            )
+        )
+        application.include_router(
+            build_inventory_router(
                 authentication,
                 authorization,
                 cast(DatabaseResources, database_resources),

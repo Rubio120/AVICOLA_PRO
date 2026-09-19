@@ -104,6 +104,26 @@ Ninguno de estos riesgos impide construir la base técnica o Identidad; deben re
 
 ## Protocolo de continuidad
 
+## Cierre autoritativo de Entrega 4 — 2026-09-19
+
+La primera entrega pendiente identificada fue la Entrega 4 — Inventario transaccional, porque las
+Entregas 2 y 3 ya estaban implementadas en el estado actual del worktree. La Entrega 4 quedó
+implementada sin commit ni push. Esta sección supersede las notas históricas que indicaban no
+iniciar Entrega 4.
+
+Se implementó la migración PostgreSQL `0004_inventory`, lotes, documentos, líneas, ledger
+append-only, saldos por bucket depósito-producto-lote, promedio ponderado móvil, transferencias,
+confirmación idempotente, reversión compensatoria y variaciones de costo. La API está protegida
+por sesión, CSRF, RBAC y auditoría; la UI incorpora consulta de saldos y registro de entradas.
+
+Evidencia fresca: PostgreSQL 16 real en `127.0.0.1:55432`, 109 tests backend, cobertura 80,66 %,
+Ruff/formato/Mypy, migración desde base vacía y roundtrip, health/readiness/OpenAPI HTTP 200,
+`npm audit` sin vulnerabilidades, `pip-audit` sin vulnerabilidades conocidas auditables, ESLint,
+TypeScript y build frontend verdes. Vitest está correctamente escrito pero delegado al PowerShell
+externo por el `PermissionError` conocido de esbuild al leer rutas padre de `C:\Users`.
+
+No se hizo commit, push, reset ni se alteraron datos reales. No se inició la Entrega 5.
+
 ## Cierre de Entrega 3 - 2026-09-18
 
 La Entrega 3 quedÃ³ implementada y revalidada sin commit ni push. Se reforzaron constraints,

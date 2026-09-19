@@ -273,6 +273,27 @@ contra rutas padre de `C:\Users`. No se hizo commit ni push por instrucción exp
 
 ```powershell
 # Estado y continuidad
+
+## Continuidad autoritativa — 2026-09-19
+
+La primera entrega pendiente identificada fue la Entrega 4 — Inventario transaccional, porque las
+Entregas 2 y 3 ya estaban implementadas en el estado actual del worktree. La Entrega 4 quedó
+implementada sin commit ni push.
+
+Se añadió la migración PostgreSQL `0004_inventory`, modelos de lotes/documentos/movimientos/
+saldos/variaciones, reglas Decimal de promedio ponderado móvil, servicio de confirmación y
+reversión, endpoints protegidos por sesión/CSRF/RBAC/auditoría y un panel frontend de
+saldos/entradas. El ledger de movimientos tiene trigger append-only y los balances usan locks
+explícitos con índice único PostgreSQL `NULLS NOT DISTINCT` para buckets con lote nulo.
+
+Gates frescos: PostgreSQL 16 real en `127.0.0.1:55432`, migración limpia/roundtrip y head
+`0004_inventory`; suite backend 109 pruebas con cobertura 80,66 %, Ruff/formato/Mypy, smoke de
+`/health/live`, `/health/ready` y `/openapi.json` en 200; `npm audit` y `pip-audit` sin hallazgos
+conocidos; ESLint, TypeScript y build frontend verdes. Vitest está escrito y se delega al
+PowerShell externo únicamente por el `PermissionError` ambiental de esbuild contra rutas padre de
+`C:\Users`.
+
+`AGENTS.md` no existe en esta raíz. No se inició la Entrega 5 ni se alteraron datos reales.
 git status --short --branch
 git log -10 --oneline --decorate
 git branch -vv
