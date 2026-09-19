@@ -2,6 +2,7 @@ import { IdentityPanel } from "@/components/identity-panel";
 import { CatalogPanel } from "@/components/catalog-panel";
 import { InventoryPanel } from "@/components/inventory-panel";
 import { ProductionPanel } from "@/components/production-panel";
+import { PurchasingPanel } from "@/components/purchasing-panel";
 import { SystemStatus } from "@/components/system-status";
 import { getBackendHealth } from "@/lib/api/health";
 import { getServerEnv } from "@/lib/env";
@@ -29,6 +30,7 @@ export default async function HomePage() {
       <CatalogPanel />
       <InventoryPanel />
       <ProductionPanel />
+      <PurchasingPanel />
     </main>
   );
 }

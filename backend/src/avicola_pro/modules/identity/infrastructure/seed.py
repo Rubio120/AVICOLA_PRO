@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection
 
@@ -39,6 +40,9 @@ BASE_PERMISSION_KEYS = (
     "parties.manage",
     "catalog.manage",
     "catalog.read",
+    "purchases.documents.create",
+    "purchases.payments.create",
+    "purchases.payments.reverse",
 )
 
 BASE_ROLE_CODES = (
@@ -91,14 +95,19 @@ def seed_base_catalog(connection: Connection) -> None:
         }
         for code in BASE_ROLE_CODES
     ]
+    connection.execute(insert(Permission).values(permission_rows).on_conflict_do_nothing())
+    connection.execute(insert(Role).values(role_rows).on_conflict_do_nothing())
+    persisted_permission_ids: dict[str, UUID] = {
+        row.key: row.id for row in connection.execute(select(Permission.key, Permission.id)).all()
+    }
+    persisted_role_ids: dict[str, UUID] = {
+        row.code: row.id for row in connection.execute(select(Role.code, Role.id)).all()
+    }
     administrator_grants = [
         {
-            "role_id": _ROLE_IDS["administrator"],
-            "permission_id": _PERMISSION_IDS[key],
+            "role_id": persisted_role_ids["administrator"],
+            "permission_id": persisted_permission_ids[key],
         }
         for key in BASE_PERMISSION_KEYS
     ]
-
-    connection.execute(insert(Permission).values(permission_rows).on_conflict_do_nothing())
-    connection.execute(insert(Role).values(role_rows).on_conflict_do_nothing())
     connection.execute(insert(RolePermission).values(administrator_grants).on_conflict_do_nothing())

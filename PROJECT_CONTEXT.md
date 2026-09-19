@@ -226,6 +226,28 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 
 ## Recuperación tras corte de energía o interrupción
 
+## Continuidad posterior — Entrega 6 — 2026-09-19
+
+En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 6, Compras + cuentas por pagar, sin commit
+ni push por instrucción expresa del usuario. El head Alembic es
+`0007_supplier_document_lines`; las migraciones `0006_purchasing` y `0007_supplier_document_lines`
+fueron probadas desde base PostgreSQL vacía y en roundtrip.
+
+El módulo `purchasing` posee órdenes, líneas, aprobación, recepciones parciales con lotes,
+documentos de proveedor, líneas snapshot, cuentas por pagar, pagos y asignaciones N:M.
+`ConfirmPurchaseReceipt` coordina inventario y avance de la orden dentro de la misma sesión;
+los pagos generan el identificador neutral `cash_movement_id` para la futura Tesorería y sus
+reversiones restauran AP sin reescribir el historial. Se mantuvieron RBAC, CSRF, auditoría,
+restricciones PostgreSQL e idempotencia.
+
+La suite backend terminó con 125 pruebas y 80,02 % de cobertura; Ruff, formato, Mypy,
+arquitectura, migraciones y health checks pasaron. ESLint, TypeScript y build frontend pasaron.
+Vitest permanece delegado al gate PowerShell externo por la restricción ambiental conocida de
+esbuild contra rutas padre de `C:\Users`; las pruebas frontend quedaron escritas.
+
+La Entrega 7 es la siguiente pendiente. No comenzar Compras de nuevo ni avanzar a Ventas sin
+un nuevo ciclo explícito de continuidad.
+
 ## Continuidad posterior — 2026-09-18
 
 La Entrega 3 quedó implementada en el working tree del worktree `AVICOLA_PRO_WEEKEND`.

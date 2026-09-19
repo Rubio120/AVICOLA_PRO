@@ -200,13 +200,14 @@ class InventoryService:
             )
             .on_conflict_do_nothing()
         )
+        lot_filter = (
+            InventoryBalance.inventory_lot_id.is_(None)
+            if lot_id is None
+            else InventoryBalance.inventory_lot_id == lot_id
+        )
         statement = (
             select(InventoryBalance)
-            .where(
-                InventoryBalance.warehouse_id == warehouse_id,
-                InventoryBalance.product_id == product_id,
-                InventoryBalance.inventory_lot_id.is_(lot_id),
-            )
+            .where(InventoryBalance.warehouse_id == warehouse_id, InventoryBalance.product_id == product_id, lot_filter)
             .with_for_update()
         )
         balance = await session.scalar(statement)

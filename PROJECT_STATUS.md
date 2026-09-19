@@ -72,6 +72,10 @@ Entrega 6.
 
 ## Entrega actual
 
+**Estado vigente:** Entrega 6 completada; la primera pendiente es la Entrega 7. Las notas
+históricas de Entrega 2 que siguen debajo se conservan como referencia y quedan supersedidas
+por el cierre autoritativo fechado 2026-09-19.
+
 **Entrega 2: Identidad, RBAC y Auditoría base.** Arquitectura oficial: sesión opaca
 completamente estatal, cookie HttpOnly/SameSite=Lax, Secure configurable, CSRF separado,
 rotación con detección de reutilización, revocación inmediata, RBAC backend, auditoría
@@ -123,6 +127,27 @@ Evidencia documental actual: documentos de arquitectura y continuidad, verificac
 Ninguno de estos riesgos impide construir la base técnica o Identidad; deben resolverse antes de la fase afectada.
 
 ## Protocolo de continuidad
+
+## Cierre autoritativo de Entrega 6 — 2026-09-19
+
+La primera entrega pendiente identificada en este working tree fue la Entrega 6 — Compras y
+cuentas por pagar. Quedó implementada sin commit ni push. Incluye migraciones PostgreSQL
+`0006_purchasing` y `0007_supplier_document_lines`, órdenes con aprobación, recepciones
+parciales con lotes y actualización atómica de inventario, documentos de proveedor, AP,
+pagos N:M, idempotencia, saldos exactos y reversión compensatoria con `cash_movement_id`.
+
+La API aplica sesión, CSRF, RBAC y auditoría; la UI incorpora consulta segura de órdenes. Se
+añadieron pruebas unitarias, de rutas, migración limpia/roundtrip e integración PostgreSQL
+real para el flujo orden → recepción → stock → AP → pago → reversión.
+
+Evidencia fresca: 125 pruebas backend verdes, cobertura 80,02 %, Ruff/formato/Mypy y reglas
+arquitectónicas verdes; PostgreSQL 16 real en `127.0.0.1:55432` en
+`0007_supplier_document_lines (head)`; health/migraciones verdes; ESLint, TypeScript y build
+frontend verdes; `npm audit` sin vulnerabilidades y `pip-audit` sin vulnerabilidades conocidas.
+Vitest está correctamente escrito pero su ejecución queda delegada al PowerShell externo por
+el `PermissionError` ambiental de esbuild al leer rutas padre de `C:\Users`.
+
+No se inició la Entrega 7. La siguiente entrega pendiente es Ventas + cuentas por cobrar.
 
 ## Cierre autoritativo de Entrega 4 — 2026-09-19
 

@@ -52,6 +52,16 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "bird_adjustment_events",
         "flock_daily_records",
         "feed_consumption",
+        "purchase_orders",
+        "purchase_order_lines",
+        "purchase_receipts",
+        "purchase_receipt_lines",
+        "supplier_documents",
+        "supplier_document_lines",
+        "supplier_document_receipts",
+        "accounts_payable",
+        "supplier_payments",
+        "supplier_payment_allocations",
     }
 
 

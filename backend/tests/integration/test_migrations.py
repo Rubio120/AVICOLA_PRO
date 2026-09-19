@@ -75,6 +75,16 @@ EXPECTED_TABLES = {
     "bird_adjustment_events",
     "flock_daily_records",
     "feed_consumption",
+    "purchase_orders",
+    "purchase_order_lines",
+    "purchase_receipts",
+    "purchase_receipt_lines",
+    "supplier_documents",
+    "supplier_document_lines",
+    "supplier_document_receipts",
+    "accounts_payable",
+    "supplier_payments",
+    "supplier_payment_allocations",
 }
 
 
@@ -92,7 +102,7 @@ def migrated_database() -> None:
 def test_identity_migration_round_trip_on_real_postgresql() -> None:
     current = _run_alembic("current")
 
-    assert "0005_production" in current.stdout
+    assert "0007_supplier_document_lines" in current.stdout
 
     with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
         cursor.execute("select version()")

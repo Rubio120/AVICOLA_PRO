@@ -47,7 +47,10 @@ def clean_database() -> Iterator[None]:
             "feed_consumption, flock_daily_records, bird_adjustment_events, mortality_events, "
             "bird_movement_events, flock_balances, flock_house_assignments, flocks, "
             "inventory_document_lines, inventory_documents, inventory_balances, inventory_lots, "
-            "users, document_sequences, products restart identity"
+            "supplier_payment_allocations, supplier_payments, accounts_payable, supplier_document_receipts, "
+            "supplier_documents, purchase_receipt_lines, purchase_receipts, purchase_order_lines, "
+            "supplier_document_lines, "
+            "purchase_orders, users, document_sequences, products restart identity"
         )
         cursor.execute(
             "insert into role_permissions (role_id, permission_id) "
