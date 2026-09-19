@@ -62,6 +62,16 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "accounts_payable",
         "supplier_payments",
         "supplier_payment_allocations",
+        "sales_orders",
+        "sales_order_lines",
+        "sales_deliveries",
+        "sales_delivery_lines",
+        "commercial_documents",
+        "commercial_document_lines",
+        "commercial_document_relations",
+        "accounts_receivable",
+        "customer_payments",
+        "customer_payment_allocations",
     }
 
 

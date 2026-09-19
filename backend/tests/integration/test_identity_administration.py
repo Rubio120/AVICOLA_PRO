@@ -50,7 +50,10 @@ def clean_database() -> Iterator[None]:
             "supplier_payment_allocations, supplier_payments, accounts_payable, supplier_document_receipts, "
             "supplier_documents, purchase_receipt_lines, purchase_receipts, purchase_order_lines, "
             "supplier_document_lines, "
-            "purchase_orders, users, document_sequences, products restart identity"
+            "purchase_orders, customer_payment_allocations, customer_payments, accounts_receivable, "
+            "commercial_document_relations, commercial_document_lines, commercial_documents, "
+            "sales_delivery_lines, sales_deliveries, sales_order_lines, sales_orders, "
+            "users, document_sequences, products restart identity"
         )
         cursor.execute(
             "insert into role_permissions (role_id, permission_id) "

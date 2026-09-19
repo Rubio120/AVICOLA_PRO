@@ -2,7 +2,25 @@
 
 ## Última actualización
 
-2026-09-18 — Entrega 2 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+2026-09-19 — Entrega 7 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+
+## Cierre autoritativo de Entrega 7 — 2026-09-19
+
+La primera entrega pendiente fue Ventas y cuentas por cobrar. Se implementaron pedidos,
+entregas parciales con salida atómica de inventario, comprobantes comerciales internos no
+fiscales/no electrónicos, snapshots de cliente, numeración PostgreSQL bajo lock, desglose
+exento/IVA 5%/IVA 10%, cuentas por cobrar, cobros idempotentes y notas de crédito con límite
+acumulado y compensación de AR. `DisabledFiscalProvider` no realiza red, DNS ni persistencia.
+
+Se añadió la migración PostgreSQL `0008_sales`, modelos compartidos, API protegida con sesión,
+CSRF, RBAC y auditoría, BFF same-origin y panel frontend de Ventas. No se inició la Entrega 8.
+
+Evidencia fresca: PostgreSQL 16 real en `127.0.0.1:55432`, migración desde base vacía y
+roundtrip hasta `0008_sales (head)`, 133 pruebas backend verdes, cobertura 80,03 %, Ruff,
+formato, Mypy y arquitectura verdes; npm audit sin vulnerabilidades, pip-audit sin
+vulnerabilidades auditables y ESLint, TypeScript y build frontend verdes. Vitest está escrito
+correctamente pero su ejecución queda delegada al PowerShell externo por el `PermissionError`
+ambiental de esbuild al leer rutas padre de `C:\Users`.
 
 ## Estado global
 

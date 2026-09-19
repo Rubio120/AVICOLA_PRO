@@ -248,6 +248,26 @@ esbuild contra rutas padre de `C:\Users`; las pruebas frontend quedaron escritas
 La Entrega 7 es la siguiente pendiente. No comenzar Compras de nuevo ni avanzar a Ventas sin
 un nuevo ciclo explícito de continuidad.
 
+## Continuidad posterior — Entrega 7 — 2026-09-19
+
+En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 7, Ventas + cuentas por cobrar, sin commit
+ni push por instrucción expresa del usuario. El head Alembic es `0008_sales`; las tablas de
+pedidos, entregas, documentos internos, relaciones, AR, cobros y asignaciones se probaron
+desde base PostgreSQL vacía y en roundtrip.
+
+Ventas recalcula en backend importes exentos, bases/IVA 5% y 10%, descuentos y total con
+redondeo monetario; la emisión toma una secuencia bajo lock y conserva snapshots del cliente.
+Las entregas bloquean líneas, no permiten sobreentrega y confirman la salida de inventario en
+la misma UoW. Los cobros bloquean AR, no sobreaplican, producen `cash_movement_id` neutral y
+las notas de crédito validan el tope acumulado y compensan el saldo original. El adaptador
+fiscal V1 está deshabilitado y no realiza red, DNS ni persistencia.
+
+La suite backend terminó con 133 pruebas y 80,03 % de cobertura. Ruff, formato, Mypy,
+arquitectura, migraciones y health checks pasaron. ESLint, TypeScript y build frontend
+pasaron; Vitest permanece delegado al gate PowerShell externo por la restricción ambiental
+conocida de esbuild. La Entrega 8 es la siguiente pendiente; no comenzar Caja en esta
+ejecución.
+
 ## Continuidad posterior — 2026-09-18
 
 La Entrega 3 quedó implementada en el working tree del worktree `AVICOLA_PRO_WEEKEND`.
