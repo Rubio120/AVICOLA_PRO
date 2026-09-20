@@ -4,6 +4,25 @@
 
 2026-09-20 — Entrega 9 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
 
+## Cierre autoritativo de Entrega 10 — 2026-09-20
+
+La primera entrega pendiente fue Dashboard y reportes. Se implementó el contexto `reporting`
+con KPIs operativos de ventas, inventario, aves, AP, AR, caja y costos; rentabilidad paginada
+con filtros de fecha; límites de offset/limit; consultas parametrizadas de solo lectura y
+exclusión de borradores/reversiones. La exportación CSV está limitada y registra una auditoría
+`report.export` con `reports.export`; las consultas requieren `reports.profitability.read`.
+
+La UI añade el panel de dashboard same-origin y estados loading/error. No se creó migración:
+reporting no agrega tablas y reutiliza `audit_events`; Alembic permanece en `0010_costing`.
+
+Evidencia fresca: 157 pruebas backend verdes con 80,02 % de cobertura, PostgreSQL 16 real en
+`127.0.0.1:55432`, 22 pruebas de migración/health verdes y head `0010_costing`; Ruff, formato,
+Mypy sobre `src`, ESLint, TypeScript y build frontend verdes. Vitest está correctamente escrito
+pero queda delegado al PowerShell externo por el `PermissionError` ambiental de esbuild al leer
+rutas padre de `C:\Users`.
+
+No se inició la Entrega 11. La siguiente entrega pendiente es Preparación del piloto.
+
 ## Cierre autoritativo de Entrega 9 — 2026-09-20
 
 La primera entrega pendiente fue Costos y rentabilidad. Se implementó `costing` con eventos

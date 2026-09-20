@@ -6,6 +6,7 @@ import { PurchasingPanel } from "@/components/purchasing-panel";
 import { SalesPanel } from "@/components/sales-panel";
 import { TreasuryPanel } from "@/components/treasury-panel";
 import { CostingPanel } from "@/components/costing-panel";
+import { ReportingPanel } from "@/components/reporting-panel";
 import { SystemStatus } from "@/components/system-status";
 import { getBackendHealth } from "@/lib/api/health";
 import { getServerEnv } from "@/lib/env";
@@ -37,6 +38,7 @@ export default async function HomePage() {
       <SalesPanel />
       <TreasuryPanel />
       <CostingPanel />
+      <ReportingPanel />
     </main>
   );
 }

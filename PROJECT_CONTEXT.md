@@ -226,6 +226,23 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 
 ## Recuperación tras corte de energía o interrupción
 
+## Continuidad posterior — Entrega 10 — 2026-09-20
+
+En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 10, Dashboard y reportes, sin commit ni
+push por instrucción expresa del usuario. El contexto `reporting` consulta hechos confirmados
+mediante SQL parametrizado de solo lectura, expone KPIs y rentabilidad paginada, aplica límites
+de consulta y exporta CSV con auditoría funcional y permiso `reports.export`. La UI añade el
+panel same-origin de indicadores y estados seguros de carga/error.
+
+No se agregó migración porque no se introdujeron tablas; se verificó Alembic en
+`0010_costing (head)`, migración limpia/roundtrip y health sobre PostgreSQL real en
+`127.0.0.1:55432`. La suite pasó 157 pruebas con 80,02 % de cobertura; Ruff, formato, Mypy de
+producción, ESLint, TypeScript y build pasaron. Vitest queda delegado al PowerShell externo
+por el `PermissionError` conocido de esbuild al acceder a rutas padre de `C:\Users`.
+
+La siguiente entrega pendiente es la Entrega 11 — Preparación del piloto. No iniciar la
+Entrega 11 en esta ejecución.
+
 ## Continuidad posterior — Entrega 8 — 2026-09-20
 
 En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 8, Caja y cierres, sin commit ni push por
