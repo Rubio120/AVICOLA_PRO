@@ -76,6 +76,12 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "cash_sessions",
         "cash_movements",
         "cash_transfers",
+        "cost_centers",
+        "cost_events",
+        "cost_allocations",
+        "cost_runs",
+        "cost_run_snapshots",
+        "profitability_snapshots",
     }
 
 

@@ -99,6 +99,12 @@ EXPECTED_TABLES = {
     "cash_sessions",
     "cash_movements",
     "cash_transfers",
+    "cost_centers",
+    "cost_events",
+    "cost_allocations",
+    "cost_runs",
+    "cost_run_snapshots",
+    "profitability_snapshots",
 }
 
 
@@ -448,3 +454,24 @@ def test_treasury_enforces_one_open_session_and_append_only_movements() -> None:
                 (uuid4(), account_id, user_id),
             )
         db_connection.rollback()
+
+
+@pytest.mark.integration
+def test_costing_ledgers_and_closed_runs_are_append_only() -> None:
+    event_id = uuid4()
+    run_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "insert into cost_events (id, event_type, source_type, source_id, effective_date, amount) "
+            "values (%s, 'FEED', 'source', %s, current_date, 10)",
+            (event_id, uuid4()),
+        )
+        cursor.execute(
+            "insert into cost_runs (id, run_date, version, status) values (%s, current_date, 1, 'CLOSED')", (run_id,)
+        )
+        db_connection.commit()
+        with pytest.raises(errors.RaiseException, match="append-only"):
+            cursor.execute("update cost_events set amount = 11 where id = %s", (event_id,))
+        db_connection.rollback()
+        with pytest.raises(errors.RaiseException, match="closed cost runs"):
+            cursor.execute("update cost_runs set version = 2 where id = %s", (run_id,))

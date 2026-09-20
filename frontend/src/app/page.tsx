@@ -5,6 +5,7 @@ import { ProductionPanel } from "@/components/production-panel";
 import { PurchasingPanel } from "@/components/purchasing-panel";
 import { SalesPanel } from "@/components/sales-panel";
 import { TreasuryPanel } from "@/components/treasury-panel";
+import { CostingPanel } from "@/components/costing-panel";
 import { SystemStatus } from "@/components/system-status";
 import { getBackendHealth } from "@/lib/api/health";
 import { getServerEnv } from "@/lib/env";
@@ -26,7 +27,7 @@ export default async function HomePage() {
           Plataforma empresarial preparada para iniciar la implementación modular de forma segura y trazable.
         </p>
         <SystemStatus available={health.available} />
-        <p className="scope-note">Entrega 8 · Caja y cierres</p>
+        <p className="scope-note">Entrega 9 · Costos y rentabilidad</p>
       </section>
       <IdentityPanel apiBaseUrl="" />
       <CatalogPanel />
@@ -35,6 +36,7 @@ export default async function HomePage() {
       <PurchasingPanel />
       <SalesPanel />
       <TreasuryPanel />
+      <CostingPanel />
     </main>
   );
 }

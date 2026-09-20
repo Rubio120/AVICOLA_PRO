@@ -2,7 +2,28 @@
 
 ## Última actualización
 
-2026-09-20 — Entrega 8 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+2026-09-20 — Entrega 9 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+
+## Cierre autoritativo de Entrega 9 — 2026-09-20
+
+La primera entrega pendiente fue Costos y rentabilidad. Se implementó `costing` con eventos
+confirmados e idempotentes, centros de costo, asignaciones exactas con residual de redondeo,
+corridas versionadas, snapshots por lote/unidad, rentabilidad basada solo en hechos confirmados
+y reversiones append-only mediante eventos compensatorios.
+Las corridas cerradas y sus evidencias son inmutables mediante servicio y triggers PostgreSQL.
+
+Se añadió la migración `0010_costing`, modelos al metadata central, endpoints protegidos por
+sesión/CSRF/RBAC/auditoría y panel frontend same-origin. No hay imports desde Costing hacia
+Compras, Ventas, Producción ni Tesorería; se consumen referencias neutrales tipo/UUID.
+
+Evidencia fresca: 150 pruebas backend verdes, cobertura 80,04 %, PostgreSQL 16 real en
+`127.0.0.1:55432`, migración limpia/roundtrip y 19 pruebas de migración verdes; Ruff, formato,
+mypy sobre `src`, ESLint, TypeScript y build frontend verdes. `pip-audit` no encontró
+vulnerabilidades publicadas auditables y `npm audit --audit-level=high` no encontró vulnerabilidades.
+Vitest está escrito correctamente pero queda delegado al PowerShell externo por el `PermissionError`
+ambiental de esbuild al leer rutas padre de `C:\Users`.
+
+No se inició la Entrega 10. La siguiente entrega pendiente es Dashboard + reportes.
 
 ## Cierre autoritativo de Entrega 8 — 2026-09-20
 
@@ -42,8 +63,8 @@ ambiental de esbuild al leer rutas padre de `C:\Users`.
 
 ## Estado global
 
-**Estado vigente:** Entrega 8 completada; la primera pendiente es la Entrega 9 — Costos y
-rentabilidad. No iniciar la Entrega 9 en esta ejecución ni modificar datos reales.
+**Estado vigente:** Entrega 9 completada; la primera pendiente es la Entrega 10 — Dashboard y
+reportes. No iniciar la Entrega 10 en esta ejecución ni modificar datos reales.
 
 **Actualización 2026-09-19:** Entrega 5 (Producción avícola) completada y revalidada en este
 working tree. No se inició la Entrega 6.

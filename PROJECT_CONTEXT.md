@@ -334,6 +334,29 @@ contra rutas padre de `C:\Users`. No se hizo commit ni push por instrucción exp
 ```powershell
 # Estado y continuidad
 
+## Continuidad posterior — Entrega 9 — 2026-09-20
+
+En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 9, Costos y rentabilidad, sin commit ni push
+por instrucción expresa del usuario. El head Alembic es `0010_costing`; la migración fue probada
+desde base PostgreSQL vacía, en roundtrip y contra PostgreSQL 16 real en `127.0.0.1:55432`.
+
+Costing posee eventos confirmados idempotentes, centros de costo, asignaciones por peso con
+conservación exacta, corridas versionadas, snapshots por objetivo, snapshots de rentabilidad y
+reversiones append-only mediante eventos compensatorios.
+Los hechos se referencian mediante `source_type/source_id` sin FKs ni imports a módulos
+productores. Solo se incluyen fuentes `CONFIRMED`; corridas cerradas y snapshots tienen
+inmutabilidad en servicio y triggers PostgreSQL. El API usa sesión opaca, CSRF, RBAC y
+auditoría; el frontend incorpora el panel same-origin de corridas.
+
+Gate fresco: 150 pruebas backend verdes con cobertura 80,04 %, 19 pruebas de migración limpias/
+roundtrip verdes, Ruff/formato, mypy de `src`, ESLint, TypeScript y build frontend verdes.
+Vitest permanece delegado al PowerShell externo por el `PermissionError` conocido de esbuild al
+leer rutas padre de `C:\Users`; las pruebas frontend de Costing están escritas. `pip-audit`
+reportó cero vulnerabilidades conocidas auditables y `npm audit` reportó cero vulnerabilidades.
+
+La siguiente entrega pendiente es la Entrega 10 — Dashboard y reportes. No iniciar la Entrega
+10 en una sesión que solo cierre esta entrega.
+
 ## Continuidad autoritativa — 2026-09-19
 
 La primera entrega pendiente identificada fue la Entrega 4 — Inventario transaccional, porque las

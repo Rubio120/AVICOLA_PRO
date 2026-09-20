@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from avicola_pro import __version__
 from avicola_pro.modules.audit.infrastructure.security import SQLAlchemySecurityEventWriter
 from avicola_pro.modules.audit.infrastructure.writer import SQLAlchemyFunctionalAuditWriter
+from avicola_pro.modules.costing.api.routes import build_costing_router
 from avicola_pro.modules.identity.api.admin import build_admin_router
 from avicola_pro.modules.identity.api.auth import CSRF_HEADER, build_auth_router
 from avicola_pro.modules.identity.api.middleware import ForcedPasswordChangeMiddleware
@@ -156,6 +157,15 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
         )
         application.include_router(
             build_treasury_router(
+                authentication,
+                authorization,
+                cast(DatabaseResources, database_resources),
+                SQLAlchemyFunctionalAuditWriter(),
+                resolved_settings.session_cookie_name,
+            )
+        )
+        application.include_router(
+            build_costing_router(
                 authentication,
                 authorization,
                 cast(DatabaseResources, database_resources),
