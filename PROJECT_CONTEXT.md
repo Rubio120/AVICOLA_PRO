@@ -226,6 +226,24 @@ Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.g
 
 ## Recuperación tras corte de energía o interrupción
 
+## Continuidad posterior — Entrega 8 — 2026-09-20
+
+En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 8, Caja y cierres, sin commit ni push por
+instrucción expresa del usuario. El head Alembic es `0009_treasury`; la migración fue probada
+aisladamente desde base PostgreSQL vacía y en roundtrip.
+
+Tesorería posee cuentas, sesiones, movimientos y transferencias. Se aplican locks PostgreSQL,
+índice único parcial para una sola sesión `OPEN/REOPENED`, conciliación de esperado/contado,
+reapertura con motivo y reversión append-only enlazada. La API exige sesión, CSRF, RBAC y
+auditoría; la UI añade consulta segura de cuentas.
+Los egresos y transferencias validan saldo disponible bajo lock y no permiten saldo negativo.
+
+Gate fresco: 123 pruebas backend verdes con 80,07 % de cobertura en el gate funcional; 18
+pruebas de migración limpia/roundtrip verdes; Ruff/formato y mypy de producción verdes;
+ESLint, TypeScript y build frontend verdes. Vitest queda delegado al PowerShell externo por
+la restricción ambiental conocida de esbuild. No se inició la Entrega 9. `AGENTS.md` no existe
+en esta raíz.
+
 ## Continuidad posterior — Entrega 6 — 2026-09-19
 
 En `AVICOLA_PRO_WEEKEND` se implementó la Entrega 6, Compras + cuentas por pagar, sin commit

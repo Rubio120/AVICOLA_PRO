@@ -72,6 +72,10 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "accounts_receivable",
         "customer_payments",
         "customer_payment_allocations",
+        "cash_accounts",
+        "cash_sessions",
+        "cash_movements",
+        "cash_transfers",
     }
 
 

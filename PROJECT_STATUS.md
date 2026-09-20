@@ -2,7 +2,25 @@
 
 ## Última actualización
 
-2026-09-19 — Entrega 7 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+2026-09-20 — Entrega 8 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+
+## Cierre autoritativo de Entrega 8 — 2026-09-20
+
+La primera entrega pendiente fue Caja y cierres. Se implementaron cuentas de caja, sesiones
+con única apertura activa por cuenta, ingresos/egresos, transferencias atómicas, cierres con
+esperado/contado/diferencia, reapertura autorizada y reversión compensatoria append-only.
+Los egresos y transferencias se bloquean si dejarían saldo negativo.
+La API usa sesión opaca, CSRF, RBAC y auditoría; la UI incorpora el panel seguro de Tesorería.
+
+Se añadió la migración PostgreSQL `0009_treasury` y los modelos se registran en el metadata
+central. La jornada se probó sobre PostgreSQL real con apertura, movimiento, transferencia,
+cierre, reapertura, idempotencia y reversión.
+
+Evidencia fresca: 123 pruebas backend del gate funcional con cobertura 80,07 %, migraciones
+limpias/roundtrip aisladas con 18 pruebas verdes, Ruff y formato verdes, mypy verde sobre
+`src`, ESLint, TypeScript y build frontend verdes. Vitest está correctamente escrito, pero
+su ejecución queda delegada al PowerShell externo por el `PermissionError` de esbuild al leer
+rutas padre de `C:\Users`. No se inició la Entrega 9.
 
 ## Cierre autoritativo de Entrega 7 — 2026-09-19
 
@@ -23,6 +41,9 @@ correctamente pero su ejecución queda delegada al PowerShell externo por el `Pe
 ambiental de esbuild al leer rutas padre de `C:\Users`.
 
 ## Estado global
+
+**Estado vigente:** Entrega 8 completada; la primera pendiente es la Entrega 9 — Costos y
+rentabilidad. No iniciar la Entrega 9 en esta ejecución ni modificar datos reales.
 
 **Actualización 2026-09-19:** Entrega 5 (Producción avícola) completada y revalidada en este
 working tree. No se inició la Entrega 6.

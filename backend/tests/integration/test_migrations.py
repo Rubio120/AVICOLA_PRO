@@ -95,6 +95,10 @@ EXPECTED_TABLES = {
     "accounts_receivable",
     "customer_payments",
     "customer_payment_allocations",
+    "cash_accounts",
+    "cash_sessions",
+    "cash_movements",
+    "cash_transfers",
 }
 
 
@@ -418,3 +422,29 @@ def test_event_payloads_reject_objects_and_arrays_under_allowlisted_keys(stateme
         pytest.raises(errors.CheckViolation),
     ):
         cursor.execute(statement, (uuid4(), uuid4()))
+
+
+@pytest.mark.integration
+def test_treasury_enforces_one_open_session_and_append_only_movements() -> None:
+    account_id = uuid4()
+    session_id = uuid4()
+    user_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            insert into users (id, username, email, display_name, password_hash)
+            values (%s, 'cash-user', 'cash@example.test', 'Cash', 'hash')
+            """,
+            (user_id,),
+        )
+        cursor.execute("insert into cash_accounts (id, code, name) values (%s, 'MAIN', 'Main cash')", (account_id,))
+        cursor.execute(
+            "insert into cash_sessions (id, cash_account_id, opened_by, opening_balance) values (%s, %s, %s, 100)",
+            (session_id, account_id, user_id),
+        )
+        with pytest.raises(errors.UniqueViolation):
+            cursor.execute(
+                "insert into cash_sessions (id, cash_account_id, opened_by, opening_balance) values (%s, %s, %s, 0)",
+                (uuid4(), account_id, user_id),
+            )
+        db_connection.rollback()
