@@ -58,7 +58,7 @@ export function CatalogPanel() {
   return (
     <section className="technical-card" aria-labelledby="catalog-title">
       <p className="eyebrow">Entrega 3</p>
-      <h2 id="catalog-title">CatÃ¡logo</h2>
+      <h2 id="catalog-title">Catálogo</h2>
       <label htmlFor="catalog-search">Buscar productos</label>
       <input id="catalog-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} />
       <form onSubmit={createProduct}>
@@ -68,8 +68,8 @@ export function CatalogPanel() {
         <input id="catalog-name" value={name} onChange={(event) => setName(event.target.value)} required />
         <button type="submit">Crear producto</button>
       </form>
-      {state === "loading" ? <p role="status">Cargando catÃ¡logoâ€¦</p> : null}
-      {state === "error" ? <p role="alert">No se pudo cargar el catÃ¡logo.</p> : null}
+      {state === "loading" ? <p role="status">Cargando catálogo…</p> : null}
+      {state === "error" ? <p role="alert">No se pudo cargar el catálogo.</p> : null}
       {state === "ready" && items.length === 0 ? <p>Sin productos activos.</p> : null}
       {items.length > 0 ? <ul>{items.map((item) => <li key={item.sku ?? item.code}>{item.sku ?? item.code}: {item.name}</li>)}</ul> : null}
       {total > 20 ? (

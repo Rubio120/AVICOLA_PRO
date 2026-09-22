@@ -12,3 +12,11 @@ test("shows the treasury empty state after loading", async () => {
   await waitFor(() => expect(screen.getByText("Sin cuentas de caja activas.")).toBeInTheDocument());
   expect(screen.getByRole("heading", { name: "Caja y cierres" })).toBeInTheDocument();
 });
+
+test("shows a safe error state when treasury is unavailable", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+
+  render(<TreasuryPanel />);
+
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No se pudo cargar la caja."));
+});

@@ -10,3 +10,11 @@ test("shows the purchasing empty state", async () => {
   render(<PurchasingPanel />);
   expect(await screen.findByText("Sin órdenes de compra.")).toBeInTheDocument();
 });
+
+test("shows a safe error state when purchasing is unavailable", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+
+  render(<PurchasingPanel />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar compras.");
+});

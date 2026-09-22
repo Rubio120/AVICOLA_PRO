@@ -9,7 +9,8 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from avicola_pro.modules.identity.infrastructure.models import User
-from avicola_pro.modules.treasury.application.service import CashConflictError, CashNotFoundError, treasury_service
+from avicola_pro.modules.treasury.application.service import CashNotFoundError, treasury_service
+from avicola_pro.modules.treasury.domain.rules import CashConflictError
 from avicola_pro.modules.treasury.infrastructure.models import CashAccount
 from avicola_pro.shared.infrastructure.models import load_persistence_models
 

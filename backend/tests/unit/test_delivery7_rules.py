@@ -82,7 +82,7 @@ async def test_sales_service_rejects_empty_orders_and_missing_resources() -> Non
         )
     with pytest.raises(SalesNotFoundError, match="payment"):
         await sales_service.confirm_payment(Session(), uuid4(), uuid4())
-    assert await DisabledFiscalProvider().submit(object()) is None
+    await DisabledFiscalProvider().submit(object())
 
 
 @pytest.mark.asyncio

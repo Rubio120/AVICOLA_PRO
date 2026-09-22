@@ -2,7 +2,9 @@
 
 ## Última actualización
 
-2026-09-20 — Entrega 9 implementada y verificada; Vitest queda delegado al PowerShell externo por la restricción de esbuild del sandbox.
+2026-09-22 — Revalidación fresca del baseline: backend 157/157, cobertura 80,02 %, frontend 32/32, ramas 80,43 % y build Next.js con salida 0. La ejecución requiere redirigir cachés/temporales por permisos heredados del entorno.
+
+La evidencia completa está en `artifacts/quality/2026-09-22-gate-deliveries-4-5-fresh-evidence.txt`.
 
 ## Cierre autoritativo de Entrega 10 — 2026-09-20
 

@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 from avicola_pro.modules.sales.api.routes import OrderPayload, build_sales_router
+from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 
 def test_sales_order_payload_rejects_unknown_server_fields() -> None:
@@ -38,13 +40,11 @@ async def test_create_sales_order_endpoint_persists_and_audits() -> None:
         def __call__(self) -> Session:
             return Session()
 
-    router = build_sales_router(
-        object(), object(), SimpleNamespace(session_factory=Factory()), SimpleNamespace(add=lambda *_: None), "session"
-    )  # type: ignore[arg-type]
+    database = cast(DatabaseResources, SimpleNamespace(session_factory=Factory()))
+    router = build_sales_router(object(), object(), database, SimpleNamespace(add=lambda *_: None), "session")
+    sales_routes = [route for route in router.routes if isinstance(route, APIRoute)]
     route = next(
-        route
-        for route in router.routes
-        if isinstance(route, APIRoute) and route.path == "/api/v1/sales/orders" and "POST" in (route.methods or set())
+        route for route in sales_routes if route.path == "/api/v1/sales/orders" and "POST" in (route.methods or set())
     )
     request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "query_string": b""})
     request.state.correlation_id = str(uuid4())

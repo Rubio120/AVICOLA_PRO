@@ -38,6 +38,8 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 
 ### Fixed
 
+- Revalidación 2026-09-22: se corrigieron errores de Mypy en tests, aislamiento de `sessionStorage` entre pruebas frontend, textos UTF-8 del Catálogo y ramas frontend no cubiertas; backend y frontend pasan sus umbrales oficiales en el entorno reproducible.
+
 - El gate PowerShell ahora falla inmediatamente cuando un comando nativo devuelve código distinto de cero.
 - El gate local configura la base PostgreSQL de integración preparada por los scripts.
 - Las pruebas de configuración validan de forma aislada credenciales placeholder y CORS wildcard.

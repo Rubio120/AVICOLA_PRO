@@ -32,4 +32,24 @@ describe("CatalogPanel", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/catalog/products", expect.objectContaining({ method: "POST" }));
   });
+
+  it("shows a safe error state when the catalog is unavailable", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false } as Response);
+
+    render(<CatalogPanel />);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No se pudo cargar el catálogo."));
+  });
+
+  it("paginates catalog results in both directions", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [], total: 40 }) }));
+
+    render(<CatalogPanel />);
+    expect(await screen.findByText("Página 1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(await screen.findByText("Página 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Anterior" }));
+    expect(await screen.findByText("Página 1")).toBeInTheDocument();
+  });
 });

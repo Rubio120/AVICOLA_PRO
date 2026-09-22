@@ -33,4 +33,12 @@ describe("InventoryPanel", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/inventory/documents", expect.objectContaining({ method: "POST" }));
   });
+
+  it("shows a safe error state when inventory is unavailable", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false } as Response);
+
+    render(<InventoryPanel />);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No se pudo cargar el inventario."));
+  });
 });
