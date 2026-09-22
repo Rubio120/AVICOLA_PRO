@@ -18,7 +18,7 @@ from avicola_pro.modules.purchasing.application.service import (
     purchasing_service,
 )
 from avicola_pro.modules.purchasing.domain.rules import PurchaseConflictError
-from avicola_pro.shared.api.errors import ForbiddenError, UnauthorizedError
+from avicola_pro.shared.api.errors import ConflictError, ForbiddenError, UnauthorizedError
 from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 _identity = import_module("avicola_pro.modules.identity.application.authentication")
@@ -34,8 +34,6 @@ PurchaseOrder: Any = _models.PurchaseOrder
 PurchaseReceipt: Any = _models.PurchaseReceipt
 PurchaseReceiptLine: Any = _models.PurchaseReceiptLine
 SupplierDocument: Any = _models.SupplierDocument
-SupplierPayment: Any = _models.SupplierPayment
-SupplierPaymentAllocation: Any = _models.SupplierPaymentAllocation
 
 
 class StrictModel(BaseModel):
@@ -178,8 +176,8 @@ def build_purchasing_router(
             ),
         )
 
-    def conflict(exc: Exception) -> ForbiddenError:
-        return ForbiddenError(code="invalid_purchasing_operation", detail=str(exc))
+    def conflict(exc: Exception) -> ConflictError:
+        return ConflictError(code="invalid_purchasing_operation", detail=str(exc))
 
     @router.get("/orders", response_model=list[OrderResponse])
     async def orders(_: Any = Depends(require("purchases.orders.create"))) -> list[OrderResponse]:  # noqa: B008
@@ -283,18 +281,18 @@ def build_purchasing_router(
         _: Any = Depends(csrf_user),
     ) -> PaymentResponse:  # noqa: B008
         async with database.session_factory() as session, session.begin():
-            payment = SupplierPayment(
-                id=uuid4(),
-                supplier_id=payload.supplier_id,
-                amount=payload.amount,
-                payment_date=payload.payment_date,
-                payment_method_code=payload.payment_method_code,
-                idempotency_key=payload.idempotency_key,
-            )
-            session.add(payment)
-            await session.flush()
-            for allocation in payload.allocations:
-                session.add(SupplierPaymentAllocation(id=uuid4(), payment_id=payment.id, **allocation.model_dump()))
+            try:
+                payment, _ = await purchasing_service.create_payment(
+                    session,
+                    payload.supplier_id,
+                    payload.amount,
+                    payload.payment_date,
+                    payload.payment_method_code,
+                    payload.idempotency_key,
+                    [allocation.model_dump() for allocation in payload.allocations],
+                )
+            except PurchaseConflictError as exc:
+                raise conflict(exc) from None
             add_audit(session, user, request, "purchases.payment.create", str(payment.id))
             return PaymentResponse.model_validate(payment)
 

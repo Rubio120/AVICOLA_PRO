@@ -15,6 +15,7 @@ from avicola_pro.modules.purchasing.domain.rules import (
 
 _models = import_module("avicola_pro.modules.purchasing.infrastructure.models")
 select: Any = import_module("sqlalchemy").select
+func: Any = import_module("sqlalchemy").func
 PurchaseOrder: Any = _models.PurchaseOrder
 PurchaseOrderLine: Any = _models.PurchaseOrderLine
 PurchaseReceipt: Any = _models.PurchaseReceipt
@@ -173,6 +174,62 @@ class PurchaseService:
         )
         await session.flush()
         return document
+
+    async def create_payment(
+        self,
+        session: Any,
+        supplier_id: UUID,
+        amount: Decimal,
+        payment_date: date,
+        payment_method_code: str,
+        idempotency_key: str | None,
+        allocations: list[dict[str, Any]],
+    ) -> tuple[Any, bool]:
+        async def existing_payment() -> Any:
+            existing = await session.scalar(
+                select(SupplierPayment).where(SupplierPayment.idempotency_key == idempotency_key)
+            )
+            if existing is None:
+                return None
+            existing_allocations = list(
+                (
+                    await session.scalars(
+                        select(SupplierPaymentAllocation).where(SupplierPaymentAllocation.payment_id == existing.id)
+                    )
+                ).all()
+            )
+            requested_allocations = sorted((str(item["accounts_payable_id"]), item["amount"]) for item in allocations)
+            stored_allocations = sorted((str(item.accounts_payable_id), item.amount) for item in existing_allocations)
+            if (
+                existing.supplier_id != supplier_id
+                or existing.amount != amount
+                or existing.payment_date != payment_date
+                or existing.payment_method_code != payment_method_code
+                or stored_allocations != requested_allocations
+            ):
+                raise PurchaseConflictError("idempotency key reused with different payment data")
+            return existing
+
+        if idempotency_key:
+            await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(idempotency_key, 0))))
+            existing = await existing_payment()
+            if existing is not None:
+                return existing, True
+
+        payment = SupplierPayment(
+            id=uuid4(),
+            supplier_id=supplier_id,
+            amount=amount,
+            payment_date=payment_date,
+            payment_method_code=payment_method_code,
+            idempotency_key=idempotency_key,
+        )
+        session.add(payment)
+        await session.flush()
+        for allocation in allocations:
+            session.add(SupplierPaymentAllocation(id=uuid4(), payment_id=payment.id, **allocation))
+        await session.flush()
+        return payment, False
 
     async def confirm_payment(self, session: Any, payment_id: UUID, actor_user_id: UUID) -> Any:
         payment = await session.scalar(

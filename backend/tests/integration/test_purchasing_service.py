@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -16,11 +18,13 @@ from avicola_pro.modules.catalog.infrastructure.models import Product, Warehouse
 from avicola_pro.modules.identity.infrastructure.models import User
 from avicola_pro.modules.parties.infrastructure.models import Supplier
 from avicola_pro.modules.purchasing.application.service import purchasing_service
+from avicola_pro.modules.purchasing.domain.rules import PurchaseConflictError
 from avicola_pro.modules.purchasing.infrastructure.models import (
     AccountsPayable,
     PurchaseOrderLine,
     PurchaseReceipt,
     PurchaseReceiptLine,
+    SupplierDocument,
     SupplierPayment,
     SupplierPaymentAllocation,
 )
@@ -128,4 +132,129 @@ async def test_purchase_order_receipt_ap_payment_and_reversal_are_atomic() -> No
         reversal = await purchasing_service.reverse_payment(session, payment.id, user_id, "Correction")
         assert reversal.reversal_of_id == payment.id
         assert account.status == "OPEN"
+    await engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_supplier_payment_idempotency_reuses_identical_request_and_rejects_changed_request() -> None:
+    engine = create_async_engine(_database_url())
+    sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    supplier_id, payable_ids, actor_id = uuid4(), [uuid4(), uuid4()], uuid4()
+    async with sessions() as session, session.begin():
+        session.add(Supplier(id=supplier_id, code="IDEM-SUP", document_number="80000002-2", name="Idempotent"))
+        session.add(
+            User(
+                id=actor_id,
+                username="idempotent-buyer",
+                email="idempotent-buyer@example.test",
+                display_name="Idempotent Buyer",
+                password_hash="argon2id",  # noqa: S106
+            )
+        )
+        for ordinal, payable_id in enumerate(payable_ids, start=1):
+            document = SupplierDocument(
+                id=uuid4(),
+                supplier_id=supplier_id,
+                external_number=f"IDEM-{ordinal}",
+                document_date=date(2026, 9, 22),
+                total=Decimal("100"),
+            )
+            session.add(document)
+            await session.flush()
+            session.add(
+                AccountsPayable(
+                    id=payable_id,
+                    supplier_document_id=document.id,
+                    supplier_id=supplier_id,
+                    original_amount=Decimal("100"),
+                    balance=Decimal("100"),
+                    due_date=date(2026, 10, 22),
+                )
+            )
+
+    first_key = "delivery6-payment-001"
+    first_allocations = [
+        {"accounts_payable_id": payable_ids[0], "amount": Decimal("40")},
+        {"accounts_payable_id": payable_ids[1], "amount": Decimal("60")},
+    ]
+
+    async def create() -> UUID:
+        async with sessions() as session, session.begin():
+            payment, _ = await purchasing_service.create_payment(
+                session,
+                supplier_id,
+                Decimal("100"),
+                date(2026, 9, 22),
+                "cash",
+                first_key,
+                first_allocations,
+            )
+            return cast(UUID, payment.id)
+
+    first_id, retry_id = await asyncio.gather(create(), create())
+    assert first_id == retry_id
+
+    async with sessions() as session:
+        payments = list((await session.scalars(select(SupplierPayment))).all())
+        allocations = list((await session.scalars(select(SupplierPaymentAllocation))).all())
+    assert len(payments) == 1
+    assert len(allocations) == 2
+    assert {row.amount for row in allocations} == {Decimal("40"), Decimal("60")}
+
+    second_allocations = [
+        {"accounts_payable_id": payable_ids[0], "amount": Decimal("60")},
+        {"accounts_payable_id": payable_ids[1], "amount": Decimal("40")},
+    ]
+    async with sessions() as session, session.begin():
+        second_payment, replayed = await purchasing_service.create_payment(
+            session,
+            supplier_id,
+            Decimal("100"),
+            date(2026, 9, 22),
+            "cash",
+            "delivery6-payment-002",
+            second_allocations,
+        )
+        assert not replayed
+        await purchasing_service.confirm_payment(session, first_id, actor_id)
+        await purchasing_service.confirm_payment(session, second_payment.id, actor_id)
+        balances = list(
+            (
+                await session.scalars(
+                    select(AccountsPayable).where(AccountsPayable.id.in_(payable_ids)).order_by(AccountsPayable.id)
+                )
+            ).all()
+        )
+    assert [account.balance for account in balances] == [Decimal("0"), Decimal("0")]
+    async with sessions() as session, session.begin():
+        unkeyed_payment, replayed = await purchasing_service.create_payment(
+            session,
+            supplier_id,
+            Decimal("10"),
+            date(2026, 9, 22),
+            "cash",
+            None,
+            [{"accounts_payable_id": payable_ids[0], "amount": Decimal("10")}],
+        )
+        assert not replayed
+        assert unkeyed_payment.idempotency_key is None
+    async with sessions() as session:
+        payments = list((await session.scalars(select(SupplierPayment))).all())
+        allocations = list((await session.scalars(select(SupplierPaymentAllocation))).all())
+    assert len(payments) == 3
+    assert len(allocations) == 5
+
+    with pytest.raises(PurchaseConflictError, match="idempotency key reused"):
+        async with sessions() as session, session.begin():
+            await purchasing_service.create_payment(
+                session,
+                supplier_id,
+                Decimal("101"),
+                date(2026, 9, 22),
+                "cash",
+                first_key,
+                first_allocations,
+            )
+
     await engine.dispose()

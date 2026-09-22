@@ -38,6 +38,7 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 
 ### Fixed
 
+- Compras/AP: los pagos reusan una clave de idempotencia solo si coinciden proveedor, importe, fecha, método y asignaciones. Reintentos concurrentes se serializan en PostgreSQL; una clave con datos distintos responde con conflicto HTTP 409.
 - Revalidación 2026-09-22: se corrigieron errores de Mypy en tests, aislamiento de `sessionStorage` entre pruebas frontend, textos UTF-8 del Catálogo y ramas frontend no cubiertas; backend y frontend pasan sus umbrales oficiales en el entorno reproducible.
 
 - El gate PowerShell ahora falla inmediatamente cuando un comando nativo devuelve código distinto de cero.
