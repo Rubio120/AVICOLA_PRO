@@ -1,5 +1,7 @@
 # Rollback de aplicación
 
+Ejecutar solo con incidente confirmado, aprobador/owner disponibles e imagen previa por digest verificado. Un digest no publicado ni una imagen local efímera no son alternativa de rollback.
+
 1. Declarar el incidente y detener cambios concurrentes. Si hay riesgo de escritura corrupta, pausar el tráfico en el proxy y escalar al owner.
 2. Confirmar el último backup remoto comprobado y conservar evidencia/logs no sensibles.
 3. Cambiar `BACKEND_IMAGE_REF` y `FRONTEND_IMAGE_REF` en el archivo externo `deploy/compose/.env.production` a los digests exactos de la versión anterior aprobada.

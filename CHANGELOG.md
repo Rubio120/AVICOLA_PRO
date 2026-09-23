@@ -11,9 +11,10 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 - Smoke configurable de disponibilidad/rendimiento con camino autenticado opcional mediante cuenta sintética.
 - Evidencia de laboratorio D11: Restic 0.19.1 validó backup cifrado de PostgreSQL sintético, restore exacto y 9 conciliaciones; clave errónea y copia corrupta se rechazaron. No equivale a prueba off-host.
 - CI construye imágenes y comprueba UID/GID runtime/entrypoint de secretos; Compose valida redes y servicios.
-- Entrega 12: validador de manifiesto fail-closed; resuelve tag al commit, verifica hashes de archivos adjuntos y requiere deployment por digest. No declara readiness ni piloto aprobado sin provenance y trust root aprobados.
+- Entrega 12: paquete determinista con hashes, IDs de imagen y SBOM, attestation de GitHub verificable y gate RC que inspecciona el bundle firmado; el veredicto de código requiere que CI completo pase para el SHA exacto.
 - CI añade pip-audit/npm audit, escaneo Trivy de secretos/configuración y SARIF de imágenes no-root; los resultados remotos siguen pendientes.
-- Entrega 12 endurece el manifiesto contra evidencia vencida o no ligada al commit/digests; el gate siempre guarda un informe nuevo y nunca sobreescribe uno previo.
+- El gate D12 verifica identidad del repositorio/workflow/ref/commit, timestamp verificable de la attestation, rutas y hashes del tar, findings HIGH/CRITICAL de imágenes, SBOM, reportes, migración y tag local; crea solo un informe nuevo.
+- El estado RC separa `ready_for_user_deployment` de `pilot_status: blocked`; la prueba sintética no representa restore off-host ni RPO/RTO, y no se fingen registry digests.
 - El gate D12 ahora valida y liga también el digest de la imagen de backup a la evidencia de build.
 - Los módulos operativos registran de forma durable los rechazos de autorización 403 con actor, permiso, recurso y correlación; las decisiones de acceso y respuestas HTTP permanecen iguales.
 - Los runbooks verifican permisos del target de restore para UID/GID 10002; ESLint ignora las cachés locales ya excluidas por Git.

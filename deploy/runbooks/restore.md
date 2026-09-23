@@ -1,5 +1,7 @@
 # Backup y restore drill
 
+Este documento describe una operación futura aprobada y un target aislado; no ejecutar contra una base viva. La restauración sintética de CI/local solo comprueba el mecanismo y no acredita custodia remota, off-host, RPO o RTO.
+
 ## Generar backup
 
 El backup es una acción explícita; no se ejecuta al levantar la aplicación. El repositorio y la clave se montan desde archivos secretos externos. No configurar el repositorio Restic como una carpeta del mismo host y llamarlo “off-host”.

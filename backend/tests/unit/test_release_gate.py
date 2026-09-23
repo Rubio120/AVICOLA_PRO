@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import subprocess
 import sys
+import tarfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -19,6 +21,7 @@ EXPECTED_TAG = "v0.1.0-rc.1"
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 GIT = shutil.which("git")
 
+import deploy.release_gate as release_gate  # noqa: E402
 from deploy.release_gate import (  # noqa: E402
     ReleaseGateError,
     validate_evidence,
@@ -26,6 +29,296 @@ from deploy.release_gate import (  # noqa: E402
     verify_report_files,
     write_report_exclusively,
 )
+from scripts.verify_release_attestation import ReleaseAttestationError  # noqa: E402
+
+REPORT_NAMES = (
+    "reports/compose-smoke-summary.txt",
+    "reports/backup-restore-summary.txt",
+    "reports/source-security/trivy-source.sarif",
+    "reports/dependency-security/pip-audit.json",
+    "reports/dependency-security/npm-audit.json",
+    *(f"reports/image-security/{name}.sarif" for name in ("backend", "frontend", "backup")),
+)
+
+
+def valid_attested_bundle() -> tuple[dict[str, Any], dict[str, bytes], dict[str, Any]]:
+    files: dict[str, bytes] = {
+        REPORT_NAMES[0]: b"compose_smoke=passed\n",
+        REPORT_NAMES[1]: b"Restore reconciliation passed (9 checks)\n",
+        REPORT_NAMES[2]: b'{"version":"2.1.0","runs":[]}',
+        REPORT_NAMES[3]: b'{"vulnerabilities":[]}',
+        REPORT_NAMES[4]: b'{"metadata":{"dependencies":{"total":0}}}',
+        **{name: b'{"version":"2.1.0","runs":[]}' for name in REPORT_NAMES[5:]},
+    }
+    images = {}
+    sboms = {}
+    docker_ids = {}
+    for name in ("backend", "frontend", "backup"):
+        archive_path = f"images/avicola-pro-{name}.tar"
+        sbom_path = f"sbom/{name}.cdx.json"
+        files[archive_path] = f"image-{name}".encode()
+        files[sbom_path] = b'{"bomFormat":"CycloneDX","components":[]}'
+        digest = hashlib.sha256(files[archive_path]).hexdigest()
+        sbom_digest = hashlib.sha256(files[sbom_path]).hexdigest()
+        docker_id = "sha256:" + ("d" if name == "backend" else "e" if name == "frontend" else "9") * 64
+        images[name] = {"archive_path": archive_path, "archive_sha256": digest, "docker_image_id": docker_id}
+        sboms[name] = {"path": sbom_path, "sha256": sbom_digest}
+        docker_ids[name] = docker_id
+    files["image-metadata.json"] = json.dumps(docker_ids).encode()
+    manifest = {
+        "format_version": 1,
+        "repository": "Rubio120/AVICOLA_PRO",
+        "workflow": {"path": ".github/workflows/ci.yml", "run_id": "12345", "run_attempt": "1", "event": "push"},
+        "source": {"commit": "a" * 40, "ref": "refs/heads/weekend/autonomous"},
+        "migration": {"head": EXPECTED_HEAD},
+        "gates": {
+            name: "passed"
+            for name in (
+                "windows_toolchains",
+                "postgresql_integration",
+                "dependency_security",
+                "source_security",
+                "image_security",
+                "compose_topology",
+                "compose_smoke",
+                "backup_restore",
+            )
+        },
+        "images": images,
+        "sboms": sboms,
+        "reports": {name: {"sha256": hashlib.sha256(files[name]).hexdigest()} for name in REPORT_NAMES},
+    }
+    attestation = {
+        "repository": "Rubio120/AVICOLA_PRO",
+        "workflow": "Rubio120/AVICOLA_PRO/.github/workflows/ci.yml",
+        "source_commit": "a" * 40,
+        "source_ref": "refs/heads/weekend/autonomous",
+        "bundle_sha256": "f" * 64,
+        "attestation_verified_at": NOW.isoformat(),
+    }
+    return manifest, files, attestation
+
+
+def validate_attested(manifest: dict[str, Any], files: dict[str, bytes], attestation: dict[str, Any]) -> dict[str, Any]:
+    validator = getattr(release_gate, "validate_release_bundle", None)
+    assert callable(validator), "authenticated release-bundle validation is not implemented"
+    report = validator(
+        manifest,
+        files,
+        attestation,
+        mode="rc",
+        expected_commit="a" * 40,
+        expected_source_ref="refs/heads/weekend/autonomous",
+        expected_tag=EXPECTED_TAG,
+        expected_migration_head=EXPECTED_HEAD,
+        max_evidence_age_hours=24,
+        now=NOW,
+    )
+    return cast(dict[str, Any], report)
+
+
+def test_authenticated_bundle_can_be_technically_ready_without_claiming_pilot_or_registry_readiness() -> None:
+    manifest, files, attestation = valid_attested_bundle()
+
+    report = validate_attested(manifest, files, attestation)
+
+    assert report["technical_status"] == "ready_for_user_deployment"
+    assert report["pilot_status"] == "blocked"
+    assert report["image_archive_sha256"]["backend"] == manifest["images"]["backend"]["archive_sha256"]
+    assert report["docker_image_ids"] == {name: item["docker_image_id"] for name, item in manifest["images"].items()}
+    assert "registry_manifest_digests" not in report
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda m, f, a: m["source"].update(commit="b" * 40), "commit"),
+        (lambda m, f, a: m["source"].update(ref="refs/heads/other"), "ref"),
+        (lambda m, f, a: m["workflow"].update(path=".github/workflows/other.yml"), "workflow"),
+        (lambda m, f, a: m["gates"].update(image_security="failed"), "image_security"),
+        (lambda m, f, a: m["migration"].update(head="0009_treasury"), "migration"),
+        (lambda m, f, a: m["images"]["backend"].update(archive_sha256="0" * 64), "archive hash"),
+        (lambda m, f, a: m["sboms"]["frontend"].update(sha256="0" * 64), "SBOM hash"),
+        (lambda m, f, a: m["reports"][REPORT_NAMES[0]].update(sha256="0" * 64), "report hash"),
+        (lambda m, f, a: a.update(attestation_verified_at=(NOW - timedelta(days=3)).isoformat()), "stale attestation"),
+        (lambda m, f, a: a.update(source_commit="c" * 40), "attestation commit"),
+        (lambda m, f, a: a.update(source_ref="refs/heads/other"), "attestation ref"),
+    ],
+)
+def test_authenticated_bundle_rejects_untrusted_or_inconsistent_evidence(
+    mutate: Callable[[dict[str, Any], dict[str, bytes], dict[str, Any]], None], expected: str
+) -> None:
+    manifest, files, attestation = valid_attested_bundle()
+    mutate(manifest, files, attestation)
+
+    with pytest.raises(ReleaseGateError, match=expected):
+        validate_attested(manifest, files, attestation)
+
+
+def test_pilot_remains_blocked_even_when_authenticated_technical_release_is_ready() -> None:
+    manifest, files, attestation = valid_attested_bundle()
+    validator = getattr(release_gate, "validate_release_bundle", None)
+    assert callable(validator), "authenticated release-bundle validation is not implemented"
+
+    report = validator(
+        manifest,
+        files,
+        attestation,
+        mode="rc",
+        expected_commit="a" * 40,
+        expected_source_ref="refs/heads/weekend/autonomous",
+        expected_tag=EXPECTED_TAG,
+        expected_migration_head=EXPECTED_HEAD,
+        max_evidence_age_hours=24,
+        now=NOW,
+    )
+
+    assert report["pilot_status"] == "blocked"
+    assert any("off-host" in blocker or "RPO" in blocker for blocker in report["blockers"])
+
+
+def test_authenticated_bundle_rejects_high_and_critical_image_findings() -> None:
+    manifest, files, attestation = valid_attested_bundle()
+    scan_path = "reports/image-security/backend.sarif"
+    sarif = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {"driver": {"rules": [{"id": "CVE-example", "properties": {"tags": ["CRITICAL"]}}]}},
+                "results": [{"ruleId": "CVE-example", "level": "error", "properties": {"security-severity": "9.8"}}],
+            }
+        ],
+    }
+    files[scan_path] = json.dumps(sarif).encode()
+    manifest["reports"][scan_path]["sha256"] = hashlib.sha256(files[scan_path]).hexdigest()
+
+    with pytest.raises(ReleaseGateError, match="HIGH/CRITICAL"):
+        validate_attested(manifest, files, attestation)
+
+
+def test_authenticated_bundle_cannot_approve_pilot_without_external_restore_and_approvals() -> None:
+    manifest, files, attestation = valid_attested_bundle()
+    validator = getattr(release_gate, "validate_release_bundle", None)
+    assert callable(validator)
+
+    with pytest.raises(ReleaseGateError, match="pilot gate blocked"):
+        validator(
+            manifest,
+            files,
+            attestation,
+            mode="pilot",
+            expected_commit="a" * 40,
+            expected_source_ref="refs/heads/weekend/autonomous",
+            expected_tag=EXPECTED_TAG,
+            expected_migration_head=EXPECTED_HEAD,
+            max_evidence_age_hours=24,
+            now=NOW,
+        )
+
+
+def test_release_bundle_reader_rejects_path_traversal_and_link_members(tmp_path: Path) -> None:
+    reader = getattr(release_gate, "read_release_bundle", None)
+    assert callable(reader), "safe release-bundle reader is not implemented"
+    for index, (member_name, member_type) in enumerate(
+        (
+            ("../outside.json", "file"),
+            ("C:/outside.json", "file"),
+            ("linked.json", "symlink"),
+            ("hardlink.json", "hardlink"),
+        )
+    ):
+        archive_path = tmp_path / f"{member_type}-{index}.tar"
+        with tarfile.open(archive_path, "w") as archive:
+            member = tarfile.TarInfo(member_name)
+            if member_type == "file":
+                member.size = 1
+                archive.addfile(member, io.BytesIO(b"x"))
+            else:
+                member.type = tarfile.SYMTYPE if member_type == "symlink" else tarfile.LNKTYPE
+                member.linkname = "safe-target.json"
+                archive.addfile(member)
+        extraction_root = tmp_path / f"extract-{member_type}-{index}"
+        extraction_root.mkdir()
+        with pytest.raises(ReleaseGateError, match="unsafe bundle member"):
+            reader(archive_path, extraction_root)
+
+
+def test_release_gate_cli_verifies_bundle_then_writes_a_new_rc_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, files, attestation = valid_attested_bundle()
+    files["manifest.json"] = json.dumps(manifest).encode()
+    bundle_path = tmp_path / "avicola-pro-release-bundle.tar"
+    with tarfile.open(bundle_path, "w") as archive:
+        for name, contents in files.items():
+            member = tarfile.TarInfo(name)
+            member.size = len(contents)
+            archive.addfile(member, io.BytesIO(contents))
+    attestation["bundle_sha256"] = hashlib.sha256(bundle_path.read_bytes()).hexdigest()
+    attestation["attestation_verified_at"] = datetime.now(UTC).isoformat()
+    report_path = tmp_path / "new-report.json"
+    monkeypatch.setattr(release_gate, "verify_release_attestation", lambda *args: attestation)
+    monkeypatch.setattr(release_gate, "verify_release_tag", lambda *args: "a" * 40)
+
+    result = release_gate.main(
+        [
+            "--bundle",
+            str(bundle_path),
+            "--mode",
+            "rc",
+            "--expected-commit",
+            "a" * 40,
+            "--expected-source-ref",
+            "refs/heads/weekend/autonomous",
+            "--expected-tag",
+            EXPECTED_TAG,
+            "--expected-migration-head",
+            EXPECTED_HEAD,
+            "--max-evidence-age-hours",
+            "24",
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert json.loads(report_path.read_text(encoding="utf-8"))["technical_status"] == "ready_for_user_deployment"
+
+
+def test_release_gate_cli_does_not_write_report_when_attestation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = tmp_path / "bundle.tar"
+    bundle.write_bytes(b"not-inspected-before-attestation")
+    report_path = tmp_path / "gate-report.json"
+
+    def fail_attestation(*_: Any, **__: Any) -> dict[str, Any]:
+        raise ReleaseAttestationError("GitHub artifact attestation verification failed")
+
+    monkeypatch.setattr(release_gate, "verify_release_attestation", fail_attestation)
+    result = release_gate.main(
+        [
+            "--bundle",
+            str(bundle),
+            "--mode",
+            "rc",
+            "--expected-commit",
+            "a" * 40,
+            "--expected-source-ref",
+            "refs/heads/weekend/autonomous",
+            "--expected-tag",
+            EXPECTED_TAG,
+            "--expected-migration-head",
+            EXPECTED_HEAD,
+            "--max-evidence-age-hours",
+            "24",
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert result == 1
+    assert not report_path.exists()
 
 
 def valid_evidence() -> dict[str, Any]:

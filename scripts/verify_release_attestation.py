@@ -8,13 +8,16 @@ import json
 import re
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 REPOSITORY = "Rubio120/AVICOLA_PRO"
 SIGNER_WORKFLOW = "Rubio120/AVICOLA_PRO/.github/workflows/ci.yml"
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
-_SOURCE_REF = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9._/-]+\Z|refs/pull/[0-9]+/(?:merge|head)\Z")
+_SOURCE_REF = re.compile(
+    r"refs/(?:heads|tags)/[A-Za-z0-9._/-]+\Z|refs/pull/[0-9]+/(?:merge|head)\Z"
+)
 
 
 class ReleaseAttestationError(ValueError):
@@ -27,7 +30,9 @@ def _object(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
-def _matching_verified_attestation(output: Any, *, bundle_name: str, digest: str, source_ref: str) -> bool:
+def _matching_verified_attestation(
+    output: Any, *, bundle_name: str, digest: str, source_ref: str
+) -> str | None:
     if not isinstance(output, list) or not output:
         raise ReleaseAttestationError("GitHub CLI returned no verified attestations")
     repository_mismatch = False
@@ -55,22 +60,53 @@ def _matching_verified_attestation(output: Any, *, bundle_name: str, digest: str
             continue
 
         statement = result.get("statement")
-        if not isinstance(statement, dict) or not isinstance(statement.get("subject"), list):
+        if not isinstance(statement, dict) or not isinstance(
+            statement.get("subject"), list
+        ):
             continue
         for subject in statement["subject"]:
             if not isinstance(subject, dict) or subject.get("name") != bundle_name:
                 continue
             digests = subject.get("digest")
             if isinstance(digests, dict) and digests.get("sha256") == digest:
-                return True
+                timestamps = result.get("verifiedTimestamps")
+                if not isinstance(timestamps, list) or not timestamps:
+                    raise ReleaseAttestationError(
+                        "verified attestation has no trusted transparency timestamp"
+                    )
+                parsed_timestamps: list[datetime] = []
+                for timestamp_entry in timestamps:
+                    if not isinstance(timestamp_entry, dict) or not isinstance(
+                        timestamp_entry.get("timestamp"), str
+                    ):
+                        continue
+                    try:
+                        parsed = datetime.fromisoformat(
+                            timestamp_entry["timestamp"].replace("Z", "+00:00")
+                        )
+                    except ValueError:
+                        continue
+                    if parsed.tzinfo is not None:
+                        parsed_timestamps.append(parsed.astimezone(UTC))
+                if not parsed_timestamps:
+                    raise ReleaseAttestationError(
+                        "verified attestation transparency timestamp is invalid"
+                    )
+                return max(parsed_timestamps).isoformat().replace("+00:00", "Z")
             digest_mismatch = True
     if repository_mismatch:
-        raise ReleaseAttestationError("verified certificate repository does not match trusted repository")
+        raise ReleaseAttestationError(
+            "verified certificate repository does not match trusted repository"
+        )
     if signer_mismatch:
-        raise ReleaseAttestationError("verified certificate workflow or source ref does not match policy")
+        raise ReleaseAttestationError(
+            "verified certificate workflow or source ref does not match policy"
+        )
     if digest_mismatch:
-        raise ReleaseAttestationError("verified attestation subject digest does not match the release bundle")
-    return False
+        raise ReleaseAttestationError(
+            "verified attestation subject digest does not match the release bundle"
+        )
+    return None
 
 
 def verify_release_attestation(
@@ -82,7 +118,9 @@ def verify_release_attestation(
 ) -> dict[str, Any]:
     """Cryptographically verify the exact bundle digest, repository, workflow, commit and ref."""
     if not _SHA.fullmatch(expected_commit):
-        raise ReleaseAttestationError("expected source commit must be a full 40-character SHA")
+        raise ReleaseAttestationError(
+            "expected source commit must be a full 40-character SHA"
+        )
     if not _SOURCE_REF.fullmatch(expected_source_ref):
         raise ReleaseAttestationError("expected source ref is invalid")
     try:
@@ -112,7 +150,7 @@ def verify_release_attestation(
         "json",
     ]
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argument vector; values are validated policy inputs.
+        completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
@@ -122,32 +160,40 @@ def verify_release_attestation(
     except FileNotFoundError:
         raise ReleaseAttestationError("GitHub CLI is unavailable") from None
     except (OSError, subprocess.TimeoutExpired):
-        raise ReleaseAttestationError("GitHub attestation verification could not be completed") from None
+        raise ReleaseAttestationError(
+            "GitHub attestation verification could not be completed"
+        ) from None
     if completed.returncode != 0:
         raise ReleaseAttestationError("GitHub artifact attestation verification failed")
     try:
         verified = json.loads(completed.stdout)
     except json.JSONDecodeError:
-        raise ReleaseAttestationError("GitHub CLI returned invalid verification JSON") from None
+        raise ReleaseAttestationError(
+            "GitHub CLI returned invalid verification JSON"
+        ) from None
 
     bundle_hash = hashlib.sha256()
     with resolved_bundle.open("rb") as bundle_file:
         for chunk in iter(lambda: bundle_file.read(1024 * 1024), b""):
             bundle_hash.update(chunk)
     digest = bundle_hash.hexdigest()
-    if not _matching_verified_attestation(
+    verified_at = _matching_verified_attestation(
         verified,
         bundle_name=resolved_bundle.name,
         digest=digest,
         source_ref=expected_source_ref,
-    ):
-        raise ReleaseAttestationError("verified certificate identity or bundle subject digest does not match policy")
+    )
+    if verified_at is None:
+        raise ReleaseAttestationError(
+            "verified certificate identity or bundle subject digest does not match policy"
+        )
     return {
         "repository": REPOSITORY,
         "workflow": SIGNER_WORKFLOW,
         "source_commit": expected_commit,
         "source_ref": expected_source_ref,
         "bundle_sha256": digest,
+        "attestation_verified_at": verified_at,
     }
 
 
@@ -158,7 +204,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-source-ref", required=True)
     args = parser.parse_args(argv)
     try:
-        result = verify_release_attestation(args.bundle, args.expected_commit, args.expected_source_ref)
+        result = verify_release_attestation(
+            args.bundle, args.expected_commit, args.expected_source_ref
+        )
     except ReleaseAttestationError as error:
         parser.exit(1, f"release attestation failed: {error}\n")
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
