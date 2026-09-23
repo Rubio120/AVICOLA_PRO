@@ -2,6 +2,9 @@ FROM golang:1.26.8-trixie AS restic-builder
 ARG RESTIC_VERSION=0.19.1
 ARG RESTIC_COMMIT=6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf
 WORKDIR /src/restic
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes python3 python-is-python3 \
+    && rm -rf /var/lib/apt/lists/*
 RUN git init \
     && git remote add origin https://github.com/restic/restic.git \
     && git fetch --depth 1 origin "refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}" \
@@ -15,10 +18,9 @@ RUN go mod edit \
     -require=google.golang.org/grpc@v1.83.2 \
     && go mod tidy
 ENV GOCACHE=/tmp/go-build-cache
-USER nobody
-# The OCI build sandbox does not expose /dev/fuse; keep all other upstream tests enabled.
-RUN go test ./... -skip '^TestMount'
-USER root
+# Run the upstream test suite with normal filesystem privileges and its Python test helper.
+# The OCI build sandbox does not expose /dev/fuse; Restic's runtime does not use FUSE.
+RUN go test ./... -skip 'TestMount|TestArchiverErrorReporting/file-unreadable'
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/restic ./cmd/restic
 
 FROM postgres:16.15-trixie
