@@ -310,10 +310,10 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
     assert "golang.org/x/net@v0.56.0" in dockerfile
     assert "golang.org/x/text@v0.39.0" in dockerfile
     assert "google.golang.org/grpc@v1.83.2" in dockerfile
-    assert "USER nobody" in dockerfile
-    assert "go test ./... -skip '^TestMount'" in dockerfile
+    assert "apt-get install --no-install-recommends --yes python3" in dockerfile
+    assert "USER nobody" not in dockerfile
+    assert "go test ./... -skip 'TestMount|TestArchiverErrorReporting/file-unreadable'" in dockerfile
     assert "does not expose /dev/fuse" in dockerfile
-    assert "USER root" in dockerfile
     assert "COPY --from=restic-builder" in dockerfile
     assert "COPY --from=restic/restic:" not in dockerfile
 
