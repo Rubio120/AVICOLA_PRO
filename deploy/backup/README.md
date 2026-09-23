@@ -2,6 +2,8 @@
 
 El servicio de respaldo usa Restic para cifrar snapshots de `pg_dump` y ejecuta `restic check` al terminar. La restauración exige un snapshot ID completo y una base vacía con nombre `avicola_restore_<identificador>`; valida que el destino sea distinto del origen, verifica la integridad del repositorio y del archivo antes de restaurar, y corre nueve conciliaciones de la aplicación. No usa `--clean`, `--create`, ni borra o modifica la base de origen.
 
+Al construir la imagen, las pruebas upstream de Restic se ejecutan como usuario no privilegiado. Se excluye únicamente el grupo `TestMount`, que requiere acceso a `/dev/fuse` no disponible dentro del constructor OCI; las demás pruebas permanecen activas. El servicio AVICOLA PRO no utiliza el montaje FUSE de Restic.
+
 El flujo operativo y sus permisos están descritos en [`deploy/runbooks/restore.md`](../runbooks/restore.md). Las credenciales Restic y las URL de base se suministran como archivos montados y nunca deben guardarse en el repositorio.
 
 ## Alcance de CI

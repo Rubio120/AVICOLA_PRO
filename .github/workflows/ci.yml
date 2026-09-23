@@ -204,7 +204,7 @@ jobs:
           COMPOSE_PROJECT_NAME: avicola-ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          mkdir -p secrets
+          mkdir -p secrets artifacts-security
           postgres_password="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           session_key="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
           printf '%s' "$postgres_password" > secrets/postgres_password
@@ -266,6 +266,7 @@ jobs:
               raise AssertionError("session remained valid after logout")
           print("Readiness, migration, synthetic bootstrap, password change, login, session and logout verified")
           PY
+          printf 'commit=%s\ncompose_smoke=passed migration=0010_costing\n' "$GITHUB_SHA" > artifacts-security/compose-smoke-summary.txt
       - name: Clean isolated Compose application
         if: always()
         shell: bash
@@ -274,6 +275,14 @@ jobs:
         run: |
           docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
           rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key
+      - name: Preserve synthetic Compose smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-compose-smoke-evidence
+          path: artifacts-security/compose-smoke-summary.txt
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Run encrypted backup and isolated restore
         shell: bash
         env:
@@ -373,6 +382,35 @@ jobs:
             echo "At least one runtime image has a high/critical finding or scan error. Review all uploaded SARIF reports."
             exit 1
           fi
+      - name: Export scanned image archives
+        run: |
+          mkdir -p release-inputs/images
+          docker save --output release-inputs/images/avicola-pro-backend.tar avicola-pro-backend:ci
+          docker save --output release-inputs/images/avicola-pro-frontend.tar avicola-pro-frontend:ci
+          docker save --output release-inputs/images/avicola-pro-backup.tar avicola-pro-backup:ci
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          names = ("backend", "frontend", "backup")
+          metadata = {
+              name: subprocess.check_output(
+                  ["docker", "image", "inspect", f"avicola-pro-{name}:ci", "--format", "{{{{.Id}}}}"],
+                  text=True,
+              ).strip()
+              for name in names
+          }
+          Path("release-inputs/image-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+          PY
+      - name: Preserve runtime image archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-image-archives
+          path: release-inputs
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   deployment-compose:
     runs-on: ubuntu-latest
@@ -391,3 +429,147 @@ jobs:
           docker compose --profile operations --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
           python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; print("rendered top-level keys",sorted(c.keys()),"backup service keys",sorted(s.get("backup",{}).keys()),flush=True); exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert "networks" in c, sorted(c.keys()); assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert "networks" in s["backup"], sorted(s["backup"].keys()); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in c["networks"] or not c["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
           rm -f deploy/compose/.env.production
+
+  release-bundle:
+    if: github.event_name == 'push'
+    needs:
+      - windows-toolchains
+      - postgresql-integration
+      - dependency-security
+      - source-security
+      - deployment-images
+      - deployment-compose
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download scanned runtime image archives
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-image-archives
+          path: release-staging
+      - name: Download image scan reports
+        uses: actions/download-artifact@v4
+        with:
+          name: image-security-sarif
+          path: release-staging/reports/image-security
+      - name: Normalize image scan report names
+        run: |
+          mv release-staging/reports/image-security/trivy-backend.sarif release-staging/reports/image-security/backend.sarif
+          mv release-staging/reports/image-security/trivy-frontend.sarif release-staging/reports/image-security/frontend.sarif
+          mv release-staging/reports/image-security/trivy-backup.sarif release-staging/reports/image-security/backup.sarif
+      - name: Download dependency audit reports
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-security-reports
+          path: release-staging/reports/dependency-security
+      - name: Download source security report
+        uses: actions/download-artifact@v4
+        with:
+          name: source-security-sarif
+          path: release-staging/reports/source-security
+      - name: Download authenticated Compose smoke evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-compose-smoke-evidence
+          path: release-staging/reports
+      - name: Download synthetic backup restore evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-backup-restore-evidence
+          path: release-staging/reports
+      - name: Generate CycloneDX SBOMs from the exact scanned image archives
+        run: mkdir -p release-staging/sbom
+      - name: Generate backend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-backend.tar
+          format: cyclonedx
+          output: release-staging/sbom/backend.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Generate frontend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-frontend.tar
+          format: cyclonedx
+          output: release-staging/sbom/frontend.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Generate backup SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-backup.tar
+          format: cyclonedx
+          output: release-staging/sbom/backup.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Build checksummed release evidence bundle
+        run: >-
+          python scripts/create_release_bundle.py
+          --root release-staging
+          --output avicola-pro-release-bundle.tar
+          --commit "$GITHUB_SHA"
+          --source-ref "$GITHUB_REF"
+          --source-event "$GITHUB_EVENT_NAME"
+          --workflow-run-id "$GITHUB_RUN_ID"
+          --workflow-run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Attest release bundle provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: avicola-pro-release-bundle.tar
+      - name: Preserve release bundle for user-controlled download
+        uses: actions/upload-artifact@v4
+        with:
+          name: avicola-pro-release-bundle
+          path: avicola-pro-release-bundle.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  release-bundle-verify:
+    if: github.event_name == 'push'
+    needs: [release-bundle]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: avicola-pro-release-bundle
+      - name: Verify exact bundle provenance and reject tampering
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/verify_release_attestation.py \
+            --bundle avicola-pro-release-bundle.tar \
+            --expected-commit "$GITHUB_SHA" \
+            --expected-source-ref "$GITHUB_REF" > attestation-verification.json
+          cp avicola-pro-release-bundle.tar avicola-pro-release-bundle-tampered.tar
+          printf 'tamper' >> avicola-pro-release-bundle-tampered.tar
+          if gh attestation verify avicola-pro-release-bundle-tampered.tar \
+            --repo Rubio120/AVICOLA_PRO \
+            --signer-workflow Rubio120/AVICOLA_PRO/.github/workflows/ci.yml \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json > /dev/null 2>&1; then
+            echo "Attestation accepted a modified bundle" >&2
+            exit 1
+          fi

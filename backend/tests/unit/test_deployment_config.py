@@ -195,8 +195,8 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
     assert "ports" not in overlay["services"]["restore-db"]
     assert "docker compose" in run_script
     assert "compose.ci.yml" in run_script
-    assert "assert not services[\"db\"].get(\"ports\")" in run_script
-    assert "assert not services[\"backend\"].get(\"ports\")" in run_script
+    assert 'assert not services["db"].get("ports")' in run_script
+    assert 'assert not services["backend"].get("ports")' in run_script
     assert "/health/ready" in run_script
     assert "0010_costing" in run_script
     assert "bootstrap-admin" in run_script
@@ -228,6 +228,42 @@ def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database()
     assert cleanup["if"] == "always()"
     assert "down --volumes --remove-orphans" in cleanup["run"]
     assert any(step.get("uses", "").startswith("actions/upload-artifact@") for step in steps)
+
+
+def test_release_bundle_preserves_scanned_images_sboms_and_verifiable_attestation() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    image_job = jobs["deployment-images"]
+    export = next(step for step in image_job["steps"] if step.get("name") == "Export scanned image archives")
+    image_artifact = next(step for step in image_job["steps"] if step.get("name") == "Preserve runtime image archives")
+    packaging = jobs["release-bundle"]
+    package_steps = packaging["steps"]
+    attestation = next(step for step in package_steps if step.get("uses", "").startswith("actions/attest@"))
+    verification = jobs["release-bundle-verify"]
+    verify_step = next(
+        step
+        for step in verification["steps"]
+        if step.get("name") == "Verify exact bundle provenance and reject tampering"
+    )
+
+    assert all(f"avicola-pro-{name}.tar" in export["run"] for name in ("backend", "frontend", "backup"))
+    assert image_artifact["with"]["name"] == "runtime-image-archives"
+    assert set(packaging["needs"]) >= {
+        "windows-toolchains",
+        "postgresql-integration",
+        "dependency-security",
+        "source-security",
+        "deployment-images",
+        "deployment-compose",
+    }
+    assert sum(step.get("uses", "").startswith("aquasecurity/trivy-action@") for step in package_steps) >= 3
+    assert attestation["with"]["subject-path"] == "avicola-pro-release-bundle.tar"
+    assert verification["needs"] == ["release-bundle"]
+    assert verification["permissions"]["attestations"] == "read"
+    assert "gh attestation verify" in verify_step["run"]
+    assert "--source-digest" in verify_step["run"] and "--source-ref" in verify_step["run"]
+    assert "tampered" in verify_step["run"]
+    assert all("docker push" not in str(step.get("run", "")) for job in jobs.values() for step in job["steps"])
 
 
 def test_runtime_images_upgrade_os_packages_during_build() -> None:
@@ -267,14 +303,17 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
 
     assert "FROM golang:1.26.8-trixie AS restic-builder" in dockerfile
     assert "ARG RESTIC_VERSION=0.19.1" in dockerfile
-    assert 'refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}' in dockerfile
+    assert "refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}" in dockerfile
     assert 'git rev-parse "v${RESTIC_VERSION}^{commit}"' in dockerfile
     assert "RESTIC_COMMIT=6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf" in dockerfile
     assert "golang.org/x/crypto@v0.55.0" in dockerfile
     assert "golang.org/x/net@v0.56.0" in dockerfile
     assert "golang.org/x/text@v0.39.0" in dockerfile
     assert "google.golang.org/grpc@v1.83.2" in dockerfile
-    assert "go test ./..." in dockerfile
+    assert "USER nobody" in dockerfile
+    assert "go test ./... -skip '^TestMount'" in dockerfile
+    assert "does not expose /dev/fuse" in dockerfile
+    assert "USER root" in dockerfile
     assert "COPY --from=restic-builder" in dockerfile
     assert "COPY --from=restic/restic:" not in dockerfile
 
@@ -286,6 +325,7 @@ def test_trivy_sarif_scans_limit_report_severities_to_the_configured_gate() -> N
         for job in workflow["jobs"].values()
         for step in job.get("steps", [])
         if step.get("uses", "").startswith("aquasecurity/trivy-action@")
+        and step.get("with", {}).get("format") == "sarif"
     ]
 
     assert scan_steps

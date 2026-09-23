@@ -1,6 +1,12 @@
 # Entrega 12 — paquete de decisión RC/piloto
 
-Estado al 2026-09-22: gate RC implementado; todavía no hay un release candidate certificado ni evidencia real de staging/off-host. Este directorio describe cómo producir el informe; no contiene una aprobación ficticia.
+Estado al 2026-09-23: el gate RC existente todavía no consume attestations autenticadas. Se está incorporando un paquete de evidencias verificable; aún no hay un release candidate certificado ni evidencia real de staging/off-host. Este directorio no contiene una aprobación ficticia.
+
+## Paquete de evidencias CI
+
+El workflow `quality` está preparado para producir el artifact `avicola-pro-release-bundle` solo después de que Windows, PostgreSQL, auditorías, builds/escaneos de imagen, smoke Compose y restore sintético pasen. El paquete enlaza el commit/ref/workflow, head Alembic, archivos de imagen `docker save`, IDs locales de imagen, sus hashes SHA-256, SBOM CycloneDX y reportes; GitHub Actions genera una attestation del archivo `.tar` y otro job verifica repositorio, workflow, commit, ref y subject, además de rechazar una copia modificada.
+
+La configuración de esos jobs ya está implementada, pero no se declara válida hasta que la ejecución CI sobre el commit exacto complete el build, los smokes, la attestation y su verificación. El paquete es un artifact para descargar, no una publicación al registry ni un despliegue.
 
 ## Gate
 
