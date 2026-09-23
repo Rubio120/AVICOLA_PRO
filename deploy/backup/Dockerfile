@@ -18,9 +18,10 @@ RUN go mod edit \
     -require=google.golang.org/grpc@v1.83.2 \
     && go mod tidy
 ENV GOCACHE=/tmp/go-build-cache
-# Run the upstream test suite with normal filesystem privileges and its Python test helper.
+# Run the upstream test suite with root build privileges and its Python test helper.
 # The OCI build sandbox does not expose /dev/fuse; Restic's runtime does not use FUSE.
-RUN go test ./... -skip 'TestMount|TestArchiverErrorReporting/file-unreadable'
+# Root can read chmod-restricted fixtures, invalidating these permission-denial tests.
+RUN go test ./... -skip 'TestMount|TestBackupErrors|TestArchiverErrorReporting/(file-unreadable|file-unreadable-ignore-error|file-subdir-unreadable|file-subdir-unreadable-ignore-error)'
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/restic ./cmd/restic
 
 FROM postgres:16.15-trixie
