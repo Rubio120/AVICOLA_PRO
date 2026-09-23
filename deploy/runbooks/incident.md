@@ -1,5 +1,7 @@
 # Incidentes operativos
 
+Usar solo con el responsable operativo. Este runbook no instala alertas ni sustituye el canal de guardia aprobado; confirmar owner, severidad y autoridad antes de acciones que afecten tráfico o datos.
+
 ## Primeros pasos
 
 - Confirmar severidad, alcance, hora de inicio y responsable que coordina.

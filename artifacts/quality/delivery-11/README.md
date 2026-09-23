@@ -8,9 +8,9 @@ El workflow `quality`, job `deployment-images`, construye y escanea los tres tag
 
 ## Estado de verificación
 
-- Regresión estructural local: pendiente de incorporar al commit de Task 2.
-- Ejecución real de Docker Compose en GitHub Actions: pendiente de CI para el commit que incorpore este cambio.
-- Los logs y resultados de CI son la fuente de evidencia de la ejecución; no se afirma que la integración haya pasado hasta que ese job termine satisfactoriamente.
+- Regresiones estructurales de Compose, imagen y flujo de backup/restore están en el worktree `weekend/autonomous`.
+- Ejecución sintética real de Compose y backup/restore en GitHub Actions sigue pendiente de un `deployment-images` verde. El último run disponible `35890371500` se detuvo construyendo Restic; por eso sus smokes y scans quedaron omitidos.
+- Un resultado local o un workflow omitido no cuenta como aprobación. Los logs y artifacts del primer run verde para el SHA exacto serán la evidencia de ejecución.
 
 ## Respaldo y restauración sintéticos
 

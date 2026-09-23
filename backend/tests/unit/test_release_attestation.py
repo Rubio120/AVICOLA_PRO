@@ -48,6 +48,7 @@ def _verification_output(
                             }
                         ]
                     },
+                    "verifiedTimestamps": [{"timestamp": "2026-09-23T16:30:00Z", "source": "Rekor"}],
                 }
             }
         ]
@@ -73,6 +74,7 @@ def test_release_attestation_verifies_exact_source_identity_and_bundle_digest(
     assert verified["source_commit"] == COMMIT
     assert verified["source_ref"] == SOURCE_REF
     assert verified["bundle_sha256"] == hashlib.sha256(bundle.read_bytes()).hexdigest()
+    assert verified["attestation_verified_at"] == "2026-09-23T16:30:00Z"
     command = calls[0]
     assert "--repo" in command and command[command.index("--repo") + 1] == "Rubio120/AVICOLA_PRO"
     assert "--signer-workflow" in command
@@ -101,7 +103,7 @@ def test_release_attestation_rejects_invalid_output_or_signer(
     san: str,
     message: str,
 ) -> None:
-    bundle = tmp_path / "bundle.tar"
+    bundle = tmp_path / "avicola-pro-release-bundle.tar"
     bundle.write_bytes(b"synthetic")
     output = stdout if stdout != "[]" else _verification_output(bundle, repository=repository, san=san)
     monkeypatch.setattr(
@@ -124,6 +126,22 @@ def test_release_attestation_rejects_subject_digest_mismatch(tmp_path: Path, mon
     )
 
     with pytest.raises(ReleaseAttestationError, match="digest"):
+        verify_release_attestation(bundle, COMMIT, SOURCE_REF, gh_executable="gh")
+
+
+def test_release_attestation_requires_a_transparency_log_verification_timestamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = tmp_path / "avicola-pro-release-bundle.tar"
+    bundle.write_bytes(b"synthetic")
+    forged = json.loads(_verification_output(bundle))
+    forged[0]["verificationResult"].pop("verifiedTimestamps")
+    monkeypatch.setattr(
+        "scripts.verify_release_attestation.subprocess.run",
+        lambda arguments, **kwargs: CompletedProcess(arguments, 0, json.dumps(forged), ""),
+    )
+
+    with pytest.raises(ReleaseAttestationError, match="timestamp"):
         verify_release_attestation(bundle, COMMIT, SOURCE_REF, gh_executable="gh")
 
 

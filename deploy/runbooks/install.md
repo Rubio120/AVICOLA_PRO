@@ -1,6 +1,6 @@
 # Instalación de staging
 
-Este procedimiento prepara un host Linux de staging. No ejecutarlo en producción sin aprobación del owner y del aprobador nombrados.
+Este procedimiento es para un staging aislado. No ejecutarlo en producción sin aprobación del owner y del aprobador nombrados; no ejecutar sobre un host real hasta que el usuario elija la ventana y los responsables confirmen los prerrequisitos. No es una orden de despliegue ni se ejecuta desde CI.
 
 ## Requisitos previos
 
@@ -9,6 +9,8 @@ Este procedimiento prepara un host Linux de staging. No ejecutarlo en producció
 - Referencias de imagen por digest SHA-256 publicadas y aprobadas por CI, un repositorio Restic remoto y una cuenta PostgreSQL dedicada.
 - Secretos entregados por un gestor seguro, nunca pegados en comandos, tickets, Git o archivos `.env`.
 - Decisiones registradas de RPO, RTO, retención, owner, aprobador y fecha de activación.
+- Gate RC local con `technical_status: ready_for_user_deployment` para el commit/ref/tag exactos y evidencia CI reciente. La atestación no sustituye la revisión humana.
+- Imágenes publicadas voluntariamente en un registry autorizado y referenciadas por sus digests reales. La CI de este proyecto solo conserva artifacts; no publica imágenes.
 
 ## Preparar configuración
 
@@ -27,8 +29,8 @@ docker compose --file deploy/compose/compose.production.yml --file deploy/backup
 docker compose --file deploy/compose/compose.production.yml --env-file deploy/compose/.env.production up -d
 ```
 
-Los Dockerfiles se construyen, analizan y publican en CI antes de staging; no se construyen imágenes nuevas en el host de despliegue. El archivo de ejemplo contiene referencias `.invalid` únicamente para permitir el render estructural y jamás debe usarse para arrancar servicios.
+Los Dockerfiles deben construirse y escanearse en CI antes de staging; el workflow no publica imágenes. El operador solo configura digests después de publicarlos por el proceso autorizado. No se construyen imágenes nuevas en el host de despliegue. El archivo de ejemplo contiene referencias `.invalid` únicamente para permitir el render estructural y jamás debe usarse para arrancar servicios.
 
 El servicio `migrate` debe terminar con código cero antes de que `backend` pase readiness y `frontend` reciba tráfico. Solo `proxy` publica puertos. Confirmar el certificado HTTPS, readiness, login con una cuenta de prueba y el smoke de `deploy/performance/smoke.js` antes de aceptar staging.
 
-El primer despliegue no es una aprobación de piloto. Adjuntar el commit/tag, digest de imagen, migración actual, reportes de escaneo, resultado de restore drill y aprobaciones operativas a la evidencia fechada.
+Un staging exitoso no aprueba un piloto ni producción. Preservar commit/tag, digests reales, migración, reportes, resultado de restore y aprobaciones operativas. Si falta un prerrequisito, no levantar el stack.
