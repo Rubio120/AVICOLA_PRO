@@ -191,6 +191,8 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
 
     assert set(overlay["services"]) >= {"db", "migrate", "backend", "frontend"}
     assert all("ports" not in overlay["services"][name] for name in ("db", "backend"))
+    assert "restore-db" in overlay["services"]
+    assert "ports" not in overlay["services"]["restore-db"]
     assert "docker compose" in run_script
     assert "compose.ci.yml" in run_script
     assert "assert not services[\"db\"].get(\"ports\")" in run_script
@@ -204,6 +206,28 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
     assert "/api/v1/auth/logout" in run_script
     assert cleanup["if"] == "always()"
     assert "down --volumes --remove-orphans" in cleanup["run"]
+
+
+def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["deployment-backup-restore"]
+    steps = job["steps"]
+    smoke = next(step for step in steps if step.get("name") == "Run encrypted backup and isolated restore")
+    cleanup = next(step for step in steps if step.get("name") == "Clean synthetic backup resources")
+    script = smoke["run"]
+
+    assert "RESTIC_PASSWORD" in script
+    assert ".ci-restic" in script
+    assert "initialize_repository" in script
+    assert "backup" in script and "restore" in script
+    assert "RESTORE_TARGET_DATABASE_NAME" in script
+    assert 'test "$source_database_url" != "$restore_target_database_url"' in script
+    assert "nine checks" in script.lower() or "9 checks" in script
+    assert "wrong" in script.lower()
+    assert "corrupt" in script.lower()
+    assert cleanup["if"] == "always()"
+    assert "down --volumes --remove-orphans" in cleanup["run"]
+    assert any(step.get("uses", "").startswith("actions/upload-artifact@") for step in steps)
 
 
 def test_runtime_images_upgrade_os_packages_during_build() -> None:
@@ -245,7 +269,7 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
     assert "ARG RESTIC_VERSION=0.19.1" in dockerfile
     assert 'refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}' in dockerfile
     assert 'git rev-parse "v${RESTIC_VERSION}^{commit}"' in dockerfile
-    assert "RESTIC_COMMIT=00e1171de5d2a17f21d2d13f9024ef2956e6afaa" in dockerfile
+    assert "RESTIC_COMMIT=6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf" in dockerfile
     assert "golang.org/x/crypto@v0.55.0" in dockerfile
     assert "golang.org/x/net@v0.56.0" in dockerfile
     assert "golang.org/x/text@v0.39.0" in dockerfile

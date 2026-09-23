@@ -1,6 +1,6 @@
 FROM golang:1.26.8-trixie AS restic-builder
 ARG RESTIC_VERSION=0.19.1
-ARG RESTIC_COMMIT=00e1171de5d2a17f21d2d13f9024ef2956e6afaa
+ARG RESTIC_COMMIT=6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf
 WORKDIR /src/restic
 RUN git init \
     && git remote add origin https://github.com/restic/restic.git \

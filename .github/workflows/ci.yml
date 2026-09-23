@@ -309,5 +309,90 @@ jobs:
           printf '%s' 'synthetic-restic-password-not-for-production' > secrets/restic_password
           cp deploy/compose/.env.production.example deploy/compose/.env.production
           docker compose --profile operations --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
-            python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; print("rendered top-level keys",sorted(c.keys()),"backup service keys",sorted(s.get("backup",{}).keys()),flush=True); exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert "networks" in c, sorted(c.keys()); assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert "networks" in s["backup"], sorted(s["backup"].keys()); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in c["networks"] or not c["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
+          python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; print("rendered top-level keys",sorted(c.keys()),"backup service keys",sorted(s.get("backup",{}).keys()),flush=True); exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert "networks" in c, sorted(c.keys()); assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert "networks" in s["backup"], sorted(s["backup"].keys()); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in c["networks"] or not c["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
           rm -f deploy/compose/.env.production
+
+  deployment-backup-restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run encrypted backup and isolated restore
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-restore-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p secrets artifacts-security .ci-restic
+          chmod 0777 .ci-restic
+          postgres_password="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          session_key="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          restic_password="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export RESTORE_TARGET_DATABASE_NAME="avicola_restore_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          source_database_url="postgresql+psycopg://avicola:${postgres_password}@db:5432/avicola_pro"
+          restore_target_database_url="postgresql+psycopg://avicola:${postgres_password}@restore-db:5432/${RESTORE_TARGET_DATABASE_NAME}"
+          test "$source_database_url" != "$restore_target_database_url"
+          printf '%s' "$postgres_password" > secrets/postgres_password
+          printf '%s' "$source_database_url" > secrets/database_url
+          printf '%s' "$session_key" > secrets/session_hmac_key
+          printf '%s' /tmp/restic > secrets/restic_repository
+          printf '%s' "$restic_password" > secrets/restic_password
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          sed -i \
+            -e 's#^BACKEND_IMAGE_REF=.*#BACKEND_IMAGE_REF=avicola-pro-backend:ci#' \
+            -e 's#^FRONTEND_IMAGE_REF=.*#FRONTEND_IMAGE_REF=avicola-pro-frontend:ci#' \
+            -e 's#^BACKUP_IMAGE_REF=.*#BACKUP_IMAGE_REF=avicola-pro-backup:ci#' \
+            deploy/compose/.env.production
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production)
+          "${compose[@]}" up --detach --wait --wait-timeout 180 db backend restore-db
+          bootstrap_output="$("${compose[@]}" exec -T backend avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'Synthetic Backup Administrator' 2>/dev/null)"
+          temporary_password="$(sed -n '/temporal:/s/^[^:]*: //p' <<< "$bootstrap_output")"
+          test -n "$temporary_password"
+          unset temporary_password bootstrap_output
+          "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/python3 backup -m deploy.backup.initialize_repository
+          backup_output="$("${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" backup)"
+          grep -F 'status=repository-verified' <<< "$backup_output"
+          snapshot_id="$(sed -n 's/^snapshot_id=\([^ ]*\).*/\1/p' <<< "$backup_output")"
+          test "${#snapshot_id}" -eq 64
+          printf '%s' "$restore_target_database_url" > secrets/restore_target_database_url
+          chmod 0444 secrets/restore_target_database_url
+          restore_output="$("${compose[@]}" --profile operations run --rm --no-deps \
+            --volume "$PWD/.ci-restic:/tmp/restic" \
+            --volume "$PWD/secrets/restore_target_database_url:/run/secrets/restore_target_database_url:ro" \
+            --env RESTORE_TARGET_DATABASE_URL_FILE=/run/secrets/restore_target_database_url \
+            --env RESTORE_TARGET_DATABASE_NAME="$RESTORE_TARGET_DATABASE_NAME" \
+            --env RESTORE_SNAPSHOT_ID="$snapshot_id" \
+            --entrypoint /usr/bin/python3 backup -m deploy.backup.restore)"
+          grep -F 'Restore reconciliation passed (9 checks)' <<< "$restore_output"
+          grep -F 'restore_status=verified' <<< "$restore_output"
+          printf '%s\n%s\n%s\n' "commit=$GITHUB_SHA" "$backup_output" "$restore_output" > artifacts-security/backup-restore-summary.txt
+          chmod -R a+rwX .ci-restic
+          cp -R .ci-restic .ci-restic-corrupt
+          python -c 'from pathlib import Path; import sys; files=[path for path in Path(sys.argv[1], "data").rglob("*") if path.is_file()]; assert files; path=files[0]; stream=path.open("r+b"); original=stream.read(1); stream.seek(0); stream.write(bytes([original[0] ^ 255])); stream.close()' .ci-restic-corrupt
+          printf '%s' 'intentionally-incorrect-synthetic-restic-key' > secrets/restic_wrong_password
+          chmod 0444 secrets/restic_wrong_password
+          if "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" --volume "$PWD/secrets/restic_wrong_password:/run/secrets/restic_wrong_password:ro" --env RESTIC_PASSWORD_FILE=/run/secrets/restic_wrong_password --entrypoint /usr/local/bin/restic backup check > artifacts-security/wrong-key-check.log 2>&1; then
+            echo 'Restic accepted an incorrect synthetic key' >&2
+            exit 1
+          fi
+          if "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic-corrupt:/tmp/restic" backup check --read-data > artifacts-security/corrupt-repository-check.log 2>&1; then
+            echo 'Restic accepted a corrupted synthetic repository' >&2
+            exit 1
+          fi
+          printf '%s\n' 'Negative checks: wrong key rejected; corrupted repository rejected.' >> artifacts-security/backup-restore-summary.txt
+      - name: Clean synthetic backup resources
+        if: always()
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-restore-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
+          rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key secrets/restic_repository secrets/restic_password secrets/restore_target_database_url secrets/restic_wrong_password
+          rm -rf .ci-restic .ci-restic-corrupt
+      - name: Preserve synthetic backup and restore evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-backup-restore-evidence
+          path: artifacts-security/*backup-restore*.txt
+          if-no-files-found: ignore
+          retention-days: 14
