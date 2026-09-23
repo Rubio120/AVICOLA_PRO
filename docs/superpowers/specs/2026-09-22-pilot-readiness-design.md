@@ -15,7 +15,7 @@ Preparar el estado del repositorio `weekend/autonomous` para una instalación de
 
 ## Decisiones de diseño
 
-1. Staging se entrega como despliegue Docker Compose de un solo host con Caddy como proxy TLS. El hostname y correo ACME se suministran fuera del repositorio.
+1. Staging se entrega como despliegue Docker Compose de un solo host con Caddy como proxy TLS. Caddy enruta todo el tráfico web hacia el frontend Next.js; el BFF de Next conserva el allowlist y reenvía llamadas al backend por una red privada. El hostname se suministra fuera del repositorio.
 2. PostgreSQL se une solo a una red interna de Compose y no publica un puerto al host en el perfil de staging/producción.
 3. Backend y frontend se construyen desde el lockfile. Las imágenes finales no incluyen toolchains de desarrollo ni se ejecutan como root.
 4. Secretos sensibles se montan desde archivos externos a Compose; los archivos fuente no se versionan. Las imágenes no contienen `.env` ni claves.

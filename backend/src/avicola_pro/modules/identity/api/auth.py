@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Awaitable, Callable
 from typing import NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Header, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from avicola_pro.modules.identity.application.authentication import (
@@ -15,9 +16,12 @@ from avicola_pro.modules.identity.application.authentication import (
     PasswordChangeError,
     PasswordChangeRequiredError,
     RequestContext,
+    SecurityEventData,
+    SecurityEventWriter,
     SessionReuseError,
     UserAccount,
 )
+from avicola_pro.modules.identity.application.authorization import AuthorizationPort
 from avicola_pro.modules.identity.application.credentials import PasswordPolicyError
 from avicola_pro.modules.identity.application.sessions import IssuedSessionTokens
 from avicola_pro.shared.api.errors import ApplicationError, ForbiddenError, UnauthorizedError
@@ -71,6 +75,43 @@ def request_context(request: Request) -> RequestContext:
         ip_address=ip_address,
         user_agent=request.headers.get("user-agent", "")[:512] or None,
     )
+
+
+def build_permission_dependency(
+    *,
+    current_user: Callable[..., Awaitable[UserAccount]],
+    authorization: AuthorizationPort,
+    security_events: SecurityEventWriter,
+    resource_type: str,
+) -> Callable[[str], Callable[..., Awaitable[UserAccount]]]:
+    """Build a permission guard that durably records authenticated denials."""
+
+    def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
+        async def dependency(
+            request: Request,
+            user: UserAccount = Depends(current_user),  # noqa: B008
+        ) -> UserAccount:
+            if not await authorization.has_permission(user.id, permission):
+                await security_events.write(
+                    SecurityEventData(
+                        actor_user_id=user.id,
+                        actor_username=user.username,
+                        event_type="authorization.denied",
+                        outcome="DENIED",
+                        context=request_context(request),
+                        metadata={
+                            "permission": permission,
+                            "resource_type": resource_type,
+                            "resource_id": request.url.path,
+                        },
+                    )
+                )
+                raise ForbiddenError(code="permission_denied", detail="Permission denied")
+            return user
+
+        return dependency
+
+    return require
 
 
 def _set_session_cookie(response: Response, settings: Settings, tokens: IssuedSessionTokens) -> None:

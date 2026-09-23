@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import date
 from decimal import Decimal
 from importlib import import_module
@@ -18,7 +17,7 @@ from avicola_pro.modules.purchasing.application.service import (
     purchasing_service,
 )
 from avicola_pro.modules.purchasing.domain.rules import PurchaseConflictError
-from avicola_pro.shared.api.errors import ConflictError, ForbiddenError, UnauthorizedError
+from avicola_pro.shared.api.errors import ConflictError, UnauthorizedError
 from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 _identity = import_module("avicola_pro.modules.identity.application.authentication")
@@ -130,7 +129,13 @@ class PaymentResponse(BaseModel):
 
 
 def build_purchasing_router(
-    authentication: AuthenticationService, authorization: Any, database: DatabaseResources, audit: Any, cookie_name: str
+    authentication: AuthenticationService,
+    authorization: Any,
+    database: DatabaseResources,
+    audit: Any,
+    cookie_name: str,
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/purchasing", tags=["purchasing"])
 
@@ -142,13 +147,12 @@ def build_purchasing_router(
         except (InvalidSessionError, SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
-        async def dependency(user: Any = Depends(current_user)) -> Any:  # noqa: B008
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
-
-        return dependency
+    require = _auth.build_permission_dependency(
+        current_user=current_user,
+        authorization=authorization,
+        security_events=security_events,
+        resource_type="purchasing",
+    )
 
     async def csrf_user(
         request: Request, _: Any = Depends(current_user), csrf: str | None = Header(default=None, alias=CSRF_HEADER)

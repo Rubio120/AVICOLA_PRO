@@ -59,6 +59,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
 
 [tool.mypy]
 python_version = "3.13"
+mypy_path = ".."
 strict = true
 packages = ["avicola_pro"]
 files = ["src", "tests"]

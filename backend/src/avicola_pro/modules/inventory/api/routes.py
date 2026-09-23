@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import date
 from decimal import Decimal
 from importlib import import_module
@@ -93,6 +92,8 @@ def build_inventory_router(
     database: DatabaseResources,
     audit: Any,
     cookie_name: str = "avicola_session",
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
 
@@ -104,13 +105,12 @@ def build_inventory_router(
         except (InvalidSessionError, SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
-        async def dependency(user: Any = Depends(current_user)) -> Any:  # noqa: B008
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
-
-        return dependency
+    require = _auth_api.build_permission_dependency(
+        current_user=current_user,
+        authorization=authorization,
+        security_events=security_events,
+        resource_type="inventory",
+    )
 
     async def csrf_user(
         request: Request,

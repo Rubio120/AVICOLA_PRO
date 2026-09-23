@@ -2,9 +2,21 @@
 
 ## Última actualización
 
-2026-09-22 — Entrega 6 revalidada con idempotencia de pagos corregida: backend 159/159, cobertura 80,30 %, frontend 32/32, ESLint, TypeScript y build Next.js verdes. Evidencia: `artifacts/quality/delivery-6/2026-09-22-evidence.txt`.
+2026-09-23 - Entregas 0-10 cerradas; 11 en preparacion tecnica y 12 en curso, aun no certificadas. Suite backend completa contra PostgreSQL 16.14: 206/206, cobertura con ramas 80,86 % (minimo 80 %), incluyendo el nuevo 403 auditado y el gate de digest de backup; Ruff/formato/Mypy verdes. Frontend previamente validado: 47/47 con 87,79 % de statements y 80,26 % de ramas. Build Next.js 16.3.5 y smokes locales autenticados/no autenticados revalidados el 23/09. Smoke de salud: 20 solicitudes, 0 errores, p95 caliente 75 ms (frio 769 ms). Smoke autenticado: bootstrap, cambio inicial de contrasena y BFF login/me/logout correctos; 20 solicitudes, 0 errores, p50 29 ms/p95 78 ms. No existe presupuesto p95 aprobado. El gate RC tiene 25 pruebas unitarias despues de exigir digests backend/frontend/backup. npm audit y pip-audit de dependencias bloqueadas no reportaron vulnerabilidades conocidas. Backup y restore pasaron localmente; no equivale a off-host. Docker no esta instalado; CI remoto, Trivy/imagenes, staging y aprobaciones operativas aun no se han validado.
 
-## Cierre autoritativo de Entrega 10 — 2026-09-20
+## Estado vigente - 2026-09-22
+
+El plan tiene 13 entregas numeradas 0-12: la Entrega 0 es documental y las otras 12 son entregas de producto. Entregas 0-10 están cerradas. Se revalidó la idempotencia de pagos de Entrega 6 y se corrigió el BFF para Tesorería, Costos e Informes.
+
+La Entrega 11 activa ya tiene en el worktree `weekend/autonomous` imagenes Docker multi-stage/no-root, Caddy/TLS, Compose privado con migracion previa, montaje de secretos, backup/restauracion Restic, reconciliaciones y runbooks. El 2026-09-22 se corrigieron dos fallos reales del flujo: valores de libpq service file serializados como cadenas INI sin comillas literales y variables de Restic incompatibles duplicadas. Las pruebas automatizadas quedaron verdes y los entrypoints de backup y restore completaron un roundtrip local; el restore paso 9/9 conciliaciones en una DB sintetica desechable. Tambien se probaron clave equivocada y corrupcion aislada. Evidencia: `artifacts/quality/delivery-11/backup-restore/local-roundtrip-2026-09-22.md`. Quedan builds reales/CI, staging y restore off-host; no se ha desplegado.
+
+La Entrega 12 esta en curso: se implemento un gate fail-closed, wrappers PowerShell/Linux y paquete de decision. El gate valida hashes contra archivos del bundle y que el tag Git local resuelva al commit esperado, pero solo emite `manifest_validated`: no autentica provenance/attestations de CI ni comprueba registry. El modo piloto falla cerrado hasta que se configure una identidad de confianza aprobada y evidencia off-host; aun no existe RC certificado. La suite completa PostgreSQL local paso 206/206 (80,86 % cobertura con ramas); Ruff/formato/Mypy tambien. La revision independiente encontro que el digest de backup no estaba ligado al build; el gate y su evidencia ahora exigen los tres digests (backend, frontend y backup). Tambien se incorporo registro durable `authorization.denied` en los ocho modulos operativos, manteniendo el 403. La revision manual de la matriz de roles/permisos sigue pendiente. Builds reales/Compose CI y scans remotos, restore/staging, repositorio off-host y smoke/carga aprobada siguen abiertos. La activacion real exige dominio, repo off-host/credenciales, RPO/RTO/retencion aprobados, owner/aprobador y restore drill externo; no se inventan esos valores ni se conecta un servicio real. La aceptacion externa sigue pendiente.
+
+Validacion local adicional 2026-09-22/23: migracion PostgreSQL 16.14 desde vacio y upgrade `0009_treasury` -> `0010_costing` aprobados en bases sinteticas desechables; smoke del frontend/API construidos localmente: 20 solicitudes, concurrencia 2, 0 errores, p50/p95 caliente 30/75 ms y p95 frio 769 ms. Smoke autenticado separado confirmó bootstrap, cambio de contraseña inicial y BFF login/me/logout sobre una DB temporal, eliminada tras la prueba: 20 solicitudes, 0 errores, p50 29 ms/p95 78 ms. No hay presupuesto aprobado. Auditorias npm/pip sin vulnerabilidades conocidas. Evidencia: `artifacts/quality/delivery-11/local-validation-2026-09-22.md`. La prueba de backup/restore local detallada se conserva aparte; no equivale a aceptacion off-host.
+
+El registro durable de rechazos de permisos se integro localmente para `settings`, `inventory`, `production`, `purchasing`, `sales`, `treasury`, `costing` y `reporting`, con el mismo HTTP 403 y evidencia de actor, permiso, recurso y correlacion. La matriz de permisos por rol aun requiere revision manual del responsable del negocio; no se invento ni se considera aprobada.
+
+## Cierre autoritativo de Entrega 10 - 2026-09-20
 
 La primera entrega pendiente fue Dashboard y reportes. Se implementó el contexto `reporting`
 con KPIs operativos de ventas, inventario, aves, AP, AR, caja y costos; rentabilidad paginada
@@ -82,8 +94,7 @@ ambiental de esbuild al leer rutas padre de `C:\Users`.
 
 ## Estado global
 
-**Estado vigente:** Entrega 9 completada; la primera pendiente es la Entrega 10 — Dashboard y
-reportes. No iniciar la Entrega 10 en esta ejecución ni modificar datos reales.
+**Estado histórico al 2026-09-20:** Entrega 9 completada y la primera pendiente era la Entrega 10. Queda supersedido por el estado vigente de 2026-09-22: Entrega 11 activa, Entrega 12 en curso.
 
 **Actualización 2026-09-19:** Entrega 5 (Producción avícola) completada y revalidada en este
 working tree. No se inició la Entrega 6.
@@ -149,18 +160,19 @@ Entrega 6.
 - Seguridad, permisos, auditoría y trazabilidad obligatorios.
 - Backup restaurado y verificado antes del piloto.
 
-## Entrega actual
+## Estado histórico al cierre de Entrega 6 - 2026-09-19
 
-**Estado vigente:** Entrega 6 completada; la primera pendiente es la Entrega 7. Las notas
-históricas de Entrega 2 que siguen debajo se conservan como referencia y quedan supersedidas
-por el cierre autoritativo fechado 2026-09-19.
+Al cierre de esta fecha, Entrega 6 estaba completada y la primera pendiente era Entrega 7. Esta
+sección y las notas de Entrega 2 que siguen debajo son históricas; el estado vigente al
+2026-09-22 aparece al inicio del documento y supersede estas referencias.
 
 **Entrega 2: Identidad, RBAC y Auditoría base.** Arquitectura oficial: sesión opaca
 completamente estatal, cookie HttpOnly/SameSite=Lax, Secure configurable, CSRF separado,
 rotación con detección de reutilización, revocación inmediata, RBAC backend, auditoría
 transaccional y bootstrap idempotente del administrador inicial.
 
-Rama activa: `delivery/02-identity-rbac-audit`. No iniciar Entrega 3 sin aprobación explícita.
+Rama activa en aquella continuidad: `delivery/02-identity-rbac-audit`. La restricción de no
+iniciar Entrega 3 correspondía a esa sesión y ya no aplica al estado vigente.
 
 Evidencia local fresca del 2026-09-18:
 

@@ -45,7 +45,12 @@ async def test_create_account_endpoint_persists_and_audits() -> None:
             return Session()
 
     router = build_treasury_router(
-        object(), object(), SimpleNamespace(session_factory=Factory()), SimpleNamespace(add=lambda *_: None), "session"
+        object(),
+        object(),
+        SimpleNamespace(session_factory=Factory()),
+        SimpleNamespace(add=lambda *_: None),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
     )
     route = next(
         route

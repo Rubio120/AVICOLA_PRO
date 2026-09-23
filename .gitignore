@@ -4,6 +4,8 @@
 .env.*.local
 !.env.example
 !**/.env.example
+secrets/
+artifacts-security/
 
 # Python
 __pycache__/
@@ -28,6 +30,15 @@ coverage/
 # Quality evidence generated locally
 artifacts/quality/**
 !artifacts/quality/.gitkeep
+!/artifacts/quality/delivery-11/
+/artifacts/quality/delivery-11/*
+!/artifacts/quality/delivery-11/backup-restore/
+/artifacts/quality/delivery-11/backup-restore/*
+!/artifacts/quality/delivery-11/backup-restore/local-roundtrip-2026-09-22.md
+!/artifacts/quality/delivery-11/local-validation-2026-09-22.md
+!/artifacts/quality/delivery-12/
+/artifacts/quality/delivery-12/*
+!/artifacts/quality/delivery-12/README.md
 
 # IDE / OS
 .idea/

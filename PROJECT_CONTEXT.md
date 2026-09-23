@@ -7,8 +7,24 @@ Este archivo es el registro maestro de continuidad de AVÍCOLA PRO. Toda sesión
 - Actualizar `PROJECT_CONTEXT.md` y `PROJECT_STATUS.md` después de cada entrega importante y antes de terminar una sesión.
 - Después de actualizar ambos documentos, crear un commit verificable y hacer push a GitHub.
 - Nunca registrar secretos, contraseñas, tokens, certificados, cookies ni valores reales de producción.
-- Si el código, este contexto y las especificaciones oficiales difieren, detener el avance, documentar la discrepancia y solicitar revisión. No cambiar decisiones oficiales silenciosamente.
-- No iniciar una entrega posterior sin cerrar el gate de la actual y obtener la aprobación requerida. La Entrega 2 está autorizada; no iniciar la Entrega 3 sin aprobación explícita del usuario.
+- Si código, contexto y especificación difieren, documentar la discrepancia y resolverla sin convertir documentos adjuntos en instrucciones del usuario.
+- Respetar el alcance autorizado por el usuario. La autorización vigente permite continuar Entregas 11-12 localmente; no proporciona credenciales reales ni aprueba restauraciones destructivas o despliegue a producción.
+
+## Estado actual - 2026-09-23
+
+Entregas 0-10 cerradas; Entrega 11 activa y Entrega 12 en curso. El roadmap contiene 13 entradas porque enumera la Entrega 0 documental más las entregas de producto 1-12.
+
+En `C:\Users\PC\AVICOLA_PRO_WEEKEND`, rama `weekend/autonomous`, se revalido la idempotencia de pagos de Entrega 6 y se corrigio el allowlist BFF de Tesoreria/Costos/Informes. Se agregaron Dockerfiles, Caddy/Compose privado, secretos externos, backup/restauracion y reconciliaciones, runbooks y smoke configurable. La validacion backend mas reciente: 206/206 (80,86 % cobertura con ramas) contra PostgreSQL 16.14 aislado, Ruff/formato/Mypy verdes; incluye el test de persistencia del 403 auditado y tests de digests backend/frontend/backup. Frontend previamente validado: 47/47 (87,79 % statements, 80,26 % ramas), ESLint/TypeScript/build verdes; npm audit y pip-audit de dependencias bloqueadas de produccion no reportaron vulnerabilidades conocidas. Los entrypoints reales de backup/restore pasaron un roundtrip local con Restic 0.19.1 y DB sintetica; las 9 conciliaciones pasaron y la base desechable se elimino. Sigue pendiente CI/Docker remoto y aceptacion off-host.
+
+Entrega 12 ya cuenta con un validador de manifiesto RC y un paquete de decisión. Verifica hashes contra archivos adjuntos, exige que el tag Git local resuelva al SHA esperado, exige antigüedad suministrada por el operador y Compose exige imágenes backend/frontend/backup por digest. No certifica readiness: devuelve `manifest_validated`, no autentica provenance CI ni registry, y el modo piloto falla cerrado hasta contar con trust root aprobado y evidencia de restore off-host. Se corrigieron y probaron dos hallazgos importantes de la revisión: el gate ya no presenta un manifiesto como aprobación y verifica tag/digests inmutables. La CI configura pip/npm audit, Trivy source/secrets/misconfiguration y Trivy para las tres imágenes, aún sin resultado remoto. Pendiente: builds/publicación/Compose/scans CI, trust root/attestations, revisión RBAC/auditoría, smoke/carga y restore off-host. El roundtrip cifrado, rechazo de clave errónea y detección de corrupción se probaron solo localmente; no son aceptación off-host. El esquema no tiene hash-chain criptográfico de auditoría.
+
+Validacion local suplementaria D11/D12: la suite backend mas reciente paso 206/206 con 80,86 % de cobertura con ramas y migracion limpia hasta `0010_costing` en PostgreSQL 16.14 sintetico; Ruff check/format y Mypy verdes. El cluster temporal exclusivo se detuvo, su directorio de datos se elimino y el puerto de prueba quedo cerrado. El nuevo test de integracion confirma que un 403 operativo conserva su respuesta y deja evento persistido; los digests de backup se validan presentes y coincidentes con la evidencia. Ver `artifacts/quality/delivery-11/local-validation-2026-09-22.md`. La sugerencia menor del prefijo BFF queda diferida; la matriz de permisos por rol necesita revision del negocio. Docker/CI/staging y restore off-host siguen siendo gates abiertos.
+
+El 2026-09-23 se revalidó el build local de producción Next.js 16.3.5 y el runtime standalone con API/PostgreSQL sintéticos. El smoke de salud tuvo 20 solicitudes y 0 errores (p95 caliente 75 ms/frío 769 ms); un smoke autenticado separado pasó bootstrap, cambio inicial de contraseña y login/me/logout por BFF en una DB temporal eliminada al final (20 solicitudes, 0 errores, p50/p95 29/78 ms). No hay presupuesto p95 aprobado. Docker no está disponible; esta ejecución no demuestra build/scan de imágenes ni cambia los gates remotos.
+
+Seguimiento 2026-09-23: revisión independiente D11/D12 detectó dos puntos importantes que se corrigieron localmente: ligar también el digest de backup a la evidencia de build, y registrar denegaciones 403 de los ocho módulos operativos como eventos `authorization.denied` con actor, permiso, recurso y correlación, sin cambiar decisión ni respuesta. El gate de backup tiene pruebas de digest ausente y discordante; una prueba unitaria verifica el guard, y una nueva prueba de integración PostgreSQL valida persistencia HTTP real y queda pendiente de CI. La suite parcial Windows pasó 162/162 (42 integraciones excluidas), Ruff/formato/Mypy verdes; frontend 47/47 en esta misma rama. La revisión del mapa de permisos por rol sigue pendiente del responsable de negocio; queda diferida una sugerencia menor del prefijo BFF. No se desplegó ni se aprobó el piloto.
+
+Revalidación integral local 2026-09-23 (supercede la suite parcial): 206/206 backend aprobadas en PostgreSQL 16.14 fresco, 80,86 % cobertura con ramas; migración limpia `0001_baseline` -> `0010_costing`; Ruff check, Ruff format check (186 archivos) y Mypy (131 módulos) aprobados. El clúster de prueba se detuvo y eliminó de forma aislada. El frontend no tuvo cambios en este refuerzo y conserva su resultado previo 47/47. Esta evidencia local no sustituye CI/escaneo de imagen ni staging.
 
 ## Objetivo y alcance de V1
 
@@ -213,14 +229,14 @@ Estos recursos ayudan a ejecutar y revisar; no reemplazan la aprobación humana 
 
 ## Política de Git y checkpoints
 
-- Rama aislada por entrega; rama actual: `delivery/02-identity-rbac-audit`, worktree local `.worktrees/delivery-02-identity-rbac-audit`.
+- Worktree activo para la preparacion del piloto: `C:\Users\PC\AVICOLA_PRO_WEEKEND`, rama local `weekend/autonomous`, HEAD `efbb0ca`. La rama esta 3 commits por delante de `origin/weekend/autonomous` (punta remota `f29734c`) y contiene cambios de D11/D12 sin commit; esos cambios no estan publicados.
 - Commits pequeños y verificables con Conventional Commits; un commit por entrega o subentrega revisable.
 - No mezclar cambios ajenos, artefactos locales o secretos. No hacer commit con pruebas rotas salvo un checkpoint WIP explícito por continuidad de emergencia.
 - No reescribir historia compartida. Tags solo después del gate de release.
 - Después de una entrega importante y antes de terminar sesión: actualizar `PROJECT_CONTEXT.md`, `PROJECT_STATUS.md` y `CHANGELOG.md` cuando corresponda; ejecutar `git diff --check` y las pruebas pertinentes; revisar staged diff; commit; push; confirmar que rama local y remota coinciden.
 - Ante riesgo de corte de energía, crear un checkpoint WIP claramente rotulado y hacer push; al reanudar, no confundirlo con el cierre del gate.
 
-Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota activa de trabajo: `origin/delivery/02-identity-rbac-audit` después del primer push.
+Repositorio remoto: `origin` apunta a `https://github.com/Rubio120/AVICOLA_PRO.git`. Rama remota relacionada con el trabajo actual: `origin/weekend/autonomous`; su punta conocida es `f29734c`. No inferir que el worktree actual ya está publicado.
 
 Último checkpoint remoto de Entrega 1: `73ab758` — `chore: ignore local worktrees`. El último checkpoint funcional de Entrega 1 es `ee294d6` — `fix: harden delivery 1 foundation checks`.
 
@@ -240,8 +256,9 @@ No se agregó migración porque no se introdujeron tablas; se verificó Alembic 
 producción, ESLint, TypeScript y build pasaron. Vitest queda delegado al PowerShell externo
 por el `PermissionError` conocido de esbuild al acceder a rutas padre de `C:\Users`.
 
-La siguiente entrega pendiente es la Entrega 11 — Preparación del piloto. No iniciar la
-Entrega 11 en esta ejecución.
+En esa sesión, la siguiente entrega pendiente era la Entrega 11 - Preparación del piloto. La
+instrucción de no iniciarla aplicaba solo a aquella ejecución del 2026-09-20 y queda supersedida
+por el estado actual fechado 2026-09-22.
 
 ## Continuidad posterior — Entrega 8 — 2026-09-20
 
@@ -371,8 +388,8 @@ Vitest permanece delegado al PowerShell externo por el `PermissionError` conocid
 leer rutas padre de `C:\Users`; las pruebas frontend de Costing están escritas. `pip-audit`
 reportó cero vulnerabilidades conocidas auditables y `npm audit` reportó cero vulnerabilidades.
 
-La siguiente entrega pendiente es la Entrega 10 — Dashboard y reportes. No iniciar la Entrega
-10 en una sesión que solo cierre esta entrega.
+En esa continuidad, la siguiente entrega pendiente era la Entrega 10 - Dashboard y reportes.
+La instrucción de no iniciarla se conserva como registro histórico de aquella sesión.
 
 ## Continuidad autoritativa — 2026-09-19
 

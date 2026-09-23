@@ -67,13 +67,14 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
     )
     session_factory = getattr(database_resources, "session_factory", None)
     if session_factory is not None:
+        security_events = SQLAlchemySecurityEventWriter(session_factory)
         password_policy = PasswordPolicy(
             min_length=resolved_settings.password_min_length,
             max_length=resolved_settings.password_max_length,
         )
         authentication = AuthenticationService(
             repository=SQLAlchemyAuthenticationRepository(session_factory),
-            security_events=SQLAlchemySecurityEventWriter(session_factory),
+            security_events=security_events,
             password_service=Argon2PasswordService(password_policy),
             token_service=SessionTokenService(
                 resolved_settings.session_hmac_key.get_secret_value(),
@@ -101,7 +102,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 authentication,
                 authorization,
                 administration,
-                SQLAlchemySecurityEventWriter(session_factory),
+                security_events,
                 resolved_settings,
             )
         )
@@ -118,6 +119,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -127,6 +129,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -136,6 +139,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -145,6 +149,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -154,6 +159,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -163,6 +169,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -172,6 +179,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
         application.include_router(
@@ -181,6 +189,7 @@ def create_app(settings: Settings | None = None, *, database: Database | None = 
                 cast(DatabaseResources, database_resources),
                 SQLAlchemyFunctionalAuditWriter(),
                 resolved_settings.session_cookie_name,
+                security_events=security_events,
             )
         )
     application.add_middleware(CorrelationIdMiddleware)

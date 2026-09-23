@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,7 @@ from starlette.requests import Request
 
 from avicola_pro.modules.production.api.routes import AdjustmentPayload, FlockPayload, build_production_router
 from avicola_pro.modules.production.infrastructure.models import Flock
+from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 
 def test_flock_payload_accepts_decimal_quantity() -> None:
@@ -68,7 +70,14 @@ async def test_production_list_and_create_endpoints_use_audit_adapter() -> None:
             return SessionContext()
 
     audit = SimpleNamespace(add=lambda *_: None)
-    router = build_production_router(object(), object(), Database(), audit, "session")  # type: ignore[arg-type]
+    router = build_production_router(
+        object(),
+        object(),
+        cast(DatabaseResources, Database()),
+        audit,
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
     list_route = next(
         route
         for route in router.routes

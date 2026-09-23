@@ -41,7 +41,14 @@ async def test_create_sales_order_endpoint_persists_and_audits() -> None:
             return Session()
 
     database = cast(DatabaseResources, SimpleNamespace(session_factory=Factory()))
-    router = build_sales_router(object(), object(), database, SimpleNamespace(add=lambda *_: None), "session")
+    router = build_sales_router(
+        object(),
+        object(),
+        database,
+        SimpleNamespace(add=lambda *_: None),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
     sales_routes = [route for route in router.routes if isinstance(route, APIRoute)]
     route = next(
         route for route in sales_routes if route.path == "/api/v1/sales/orders" and "POST" in (route.methods or set())

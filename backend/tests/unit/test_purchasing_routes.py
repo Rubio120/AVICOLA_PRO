@@ -44,7 +44,14 @@ async def test_create_order_endpoint_persists_and_audits() -> None:
             return Session()
 
     audit = SimpleNamespace(add=lambda *_: None)
-    router = build_purchasing_router(object(), object(), SimpleNamespace(session_factory=Factory()), audit, "session")  # type: ignore[arg-type]
+    router = build_purchasing_router(
+        object(),
+        object(),
+        cast(DatabaseResources, SimpleNamespace(session_factory=Factory())),
+        audit,
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
     route = next(
         route
         for route in router.routes
@@ -89,6 +96,7 @@ async def test_payment_idempotency_mismatch_is_returned_as_http_conflict(monkeyp
         cast(DatabaseResources, SimpleNamespace(session_factory=Factory())),
         SimpleNamespace(add=lambda *_: None),
         "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
     )
     route = next(
         route

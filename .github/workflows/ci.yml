@@ -2,7 +2,7 @@ name: quality
 
 on:
   push:
-    branches: [master, "delivery/**"]
+    branches: [master, "delivery/**", "weekend/**"]
   pull_request:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
           uv run ruff format --check .
           uv run ruff check .
           uv run mypy src tests
-          uv run pytest -m "not integration"
+          uv run pytest -m "not integration" --no-cov
       - name: Frontend locked install and checks
         working-directory: frontend
         run: |
@@ -49,13 +49,13 @@ jobs:
       postgres:
         image: postgres:16.14-alpine
         env:
-          POSTGRES_DB: avicola_pro_test
+          POSTGRES_DB: avicola_pro
           POSTGRES_USER: avicola
           POSTGRES_PASSWORD: ci-only-password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U avicola -d avicola_pro_test"
+          --health-cmd "pg_isready -U avicola -d avicola_pro"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 12
@@ -72,8 +72,143 @@ jobs:
       - name: Migrate and test with PostgreSQL 16
         working-directory: backend
         run: |
+          test "$AVICOLA_TEST_DATABASE_URL" != "$AVICOLA_DATABASE_URL"
+          PGPASSWORD=ci-only-password createdb --host 127.0.0.1 --username avicola avicola_pro_test
           uv run alembic upgrade head
           uv run pytest
         env:
-          AVICOLA_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+          AVICOLA_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro
           AVICOLA_TEST_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+
+  dependency-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare report directory
+        run: mkdir -p artifacts-security
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Audit locked Python dependencies
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-groups
+          uv run pip-audit --format=json --output=../artifacts-security/pip-audit.json
+      - name: Audit locked Node dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high --json > ../artifacts-security/npm-audit.json
+      - name: Preserve machine-readable dependency reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-reports
+          path: artifacts-security/*.json
+          if-no-files-found: ignore
+
+  source-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan source for secrets and unsafe configuration
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          format: sarif
+          output: trivy-source.sarif
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+      - name: Preserve machine-readable source scan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-security-sarif
+          path: trivy-source.sarif
+          if-no-files-found: ignore
+
+  deployment-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked non-root runtime images
+        run: |
+          docker build --file backend/Dockerfile --tag avicola-pro-backend:ci .
+          docker build --file frontend/Dockerfile --tag avicola-pro-frontend:ci .
+          docker build --file deploy/backup/Dockerfile --tag avicola-pro-backup:ci .
+          test "$(docker image inspect avicola-pro-backend:ci --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect avicola-pro-frontend:ci --format '{{.Config.User}}')" = "node"
+          test "$(docker image inspect avicola-pro-backup:ci --format '{{.Config.User}}')" = "10002:10002"
+      - name: Scan backend runtime image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-backend:ci
+          format: sarif
+          output: trivy-backend.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Scan frontend runtime image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-frontend:ci
+          format: sarif
+          output: trivy-frontend.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Scan backup runtime image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-backup:ci
+          format: sarif
+          output: trivy-backup.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Smoke-test backend secret entrypoint in Linux container
+        shell: bash
+        run: |
+          mkdir -p secrets
+          printf '%s' 'postgresql+psycopg://avicola:synthetic-postgres-password@db:5432/avicola_pro' > secrets/database_url
+          python -c 'import secrets; from pathlib import Path; import base64; Path("secrets/session_hmac_key").write_text(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("="))'
+          docker run --rm \
+            --mount "type=bind,source=$PWD/secrets/database_url,target=/run/secrets/database_url,readonly" \
+            --mount "type=bind,source=$PWD/secrets/session_hmac_key,target=/run/secrets/session_hmac_key,readonly" \
+            --env AVICOLA_DATABASE_URL_FILE=/run/secrets/database_url \
+            --env AVICOLA_SESSION_HMAC_KEY_FILE=/run/secrets/session_hmac_key \
+            avicola-pro-backend:ci python -c 'import os; assert os.environ["AVICOLA_DATABASE_URL"].startswith("postgresql+psycopg://"); assert len(os.environ["AVICOLA_SESSION_HMAC_KEY"]) >= 43; assert "AVICOLA_DATABASE_URL_FILE" not in os.environ; print("Secrets loaded; values withheld")'
+      - name: Preserve machine-readable image scans
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-security-sarif
+          path: trivy-*.sarif
+          if-no-files-found: ignore
+
+  deployment-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render Compose with synthetic secrets and enforce private topology
+        shell: bash
+        run: |
+          mkdir -p secrets
+          printf '%s' 'synthetic-postgres-password' > secrets/postgres_password
+          printf '%s' 'postgresql+psycopg://avicola:synthetic-postgres-password@db:5432/avicola_pro' > secrets/database_url
+          printf '%s' 'synthetic-session-key-not-for-production' > secrets/session_hmac_key
+          printf '%s' 'https://backup.example.invalid/synthetic-repository' > secrets/restic_repository
+          printf '%s' 'synthetic-restic-password-not-for-production' > secrets/restic_password
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          docker compose --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
+            python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in s["networks"] or not s["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
+          rm -f deploy/compose/.env.production

@@ -2,7 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env";
 
-const allowedPrefixes = ["v1/auth/", "v1/company-profile", "v1/tax-rates", "v1/parties/", "v1/catalog/", "v1/inventory/", "v1/production/", "v1/purchasing/", "v1/sales/"];
+const allowedPrefixes = [
+  "v1/auth/",
+  "v1/company-profile",
+  "v1/tax-rates",
+  "v1/parties/",
+  "v1/catalog/",
+  "v1/inventory/",
+  "v1/production/",
+  "v1/purchasing/",
+  "v1/sales/",
+  "v1/treasury/",
+  "v1/costing/",
+  "v1/reports/",
+];
 
 function isAllowedPath(path: string) {
   return allowedPrefixes.some((prefix) => path.startsWith(prefix));

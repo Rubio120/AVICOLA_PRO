@@ -42,7 +42,13 @@ class PageResponse(BaseModel):
 
 
 def build_reporting_router(
-    authentication: Any, authorization: Any, database: Any, audit: Any, cookie_name: str
+    authentication: Any,
+    authorization: Any,
+    database: Any,
+    audit: Any,
+    cookie_name: str,
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
     reader = import_module("avicola_pro.modules.reporting.infrastructure.reader")
@@ -55,13 +61,12 @@ def build_reporting_router(
         except (_identity.InvalidSessionError, _identity.SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Any:
-        async def dependency(user: Any = Depends(current_user)) -> Any:
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
-
-        return dependency
+    require = _auth.build_permission_dependency(
+        current_user=current_user,
+        authorization=authorization,
+        security_events=security_events,
+        resource_type="reporting",
+    )
 
     def filters(
         date_from: date | None = Query(default=None),

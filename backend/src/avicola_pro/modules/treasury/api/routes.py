@@ -1,7 +1,6 @@
 # ruff: noqa: B008
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import date
 from decimal import Decimal
 from importlib import import_module
@@ -111,7 +110,13 @@ class TransferResponse(BaseModel):
 
 
 def build_treasury_router(
-    authentication: Any, authorization: Any, database: Any, audit: Any, cookie_name: str
+    authentication: Any,
+    authorization: Any,
+    database: Any,
+    audit: Any,
+    cookie_name: str,
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/treasury", tags=["treasury"])
     _auth = import_module("avicola_pro.modules.identity.api.auth")
@@ -123,13 +128,12 @@ def build_treasury_router(
         except (_identity.InvalidSessionError, _identity.SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Callable[..., Awaitable[Any]]:
-        async def dependency(user: Any = Depends(current_user)) -> Any:
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
-
-        return dependency
+    require = _auth.build_permission_dependency(
+        current_user=current_user,
+        authorization=authorization,
+        security_events=security_events,
+        resource_type="treasury",
+    )
 
     async def csrf_user(
         request: Request,

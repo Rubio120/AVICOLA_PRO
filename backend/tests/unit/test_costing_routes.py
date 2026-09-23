@@ -6,7 +6,14 @@ from avicola_pro.modules.costing.api.routes import build_costing_router
 
 
 def test_costing_router_exposes_protected_run_and_snapshot_endpoints() -> None:
-    router = build_costing_router(SimpleNamespace(), SimpleNamespace(), SimpleNamespace(), SimpleNamespace(), "session")
+    router = build_costing_router(
+        SimpleNamespace(),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
     paths = {route.path for route in router.routes if isinstance(route, APIRoute)}
     assert {
         "/api/v1/costing/events",

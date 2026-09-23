@@ -44,7 +44,7 @@ AVICOLA_TIMEZONE=America/Asuncion
 AVICOLA_BASE_CURRENCY=PYG
 ```
 
-Secretos de autenticación y cookies seguras pertenecen a Entrega 2 y aún no forman parte de la configuración implementada.
+La configuración de producción vive en `deploy/compose/compose.production.yml`: establece ambiente `production`, logs JSON, cookie Secure y CORS limitado al dominio configurado. La URL de base y HMAC se cargan desde archivos secretos externos; no se escriben en argumentos, Docker build args ni en el archivo de entorno versionado.
 
 El repositorio incluirá `.env.example` sin secretos. Certificados, contraseñas y tokens no se almacenarán en Git ni en `app_settings`.
 
@@ -95,6 +95,8 @@ Validación de restauración:
 ## Despliegue inicial
 
 Un servidor Linux podrá ejecutar proxy TLS, frontend, backend y PostgreSQL o conectarse a una base administrada. PostgreSQL no se expondrá públicamente. Los contenedores se ejecutarán sin root, con health checks, límites y volúmenes explícitos.
+
+La topología Compose y los pasos de secretos, puesta en marcha, rollback, incidentes y restore están en `deploy/runbooks/`. Caddy termina TLS y reenvía todo al frontend/BFF; el frontend accede al backend solo por una red privada. La computadora de desarrollo actual no tiene Docker, por lo que los builds/configuración de imagen aún deben verificarse en CI o en un host Docker.
 
 ## Observabilidad y runbooks
 

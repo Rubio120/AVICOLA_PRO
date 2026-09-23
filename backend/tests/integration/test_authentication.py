@@ -6,7 +6,7 @@ import sys
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -166,6 +166,43 @@ async def test_login_issues_secure_opaque_cookie_and_persists_only_hashes(
     assert event.outcome == "SUCCESS"
     assert session_token not in str(event.metadata_)
     assert csrf_token not in str(event.metadata_)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_operational_permission_denial_is_persisted_without_changing_403(
+    auth_context: tuple[DatabaseResources, AsyncClient],
+) -> None:
+    resources, client = auth_context
+    user = await _create_user(resources)
+    assert (await _login(client)).status_code == 200
+    correlation_id = UUID("1cb538a7-0e37-4b7c-9e59-101010101010")
+
+    denied = await client.get(
+        "/api/v1/inventory/balances",
+        headers={"X-Correlation-ID": str(correlation_id), "User-Agent": "permission-audit-test"},
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "permission_denied"
+    async with resources.session_factory() as session:
+        event = (
+            await session.scalars(
+                select(SecurityEvent).where(
+                    SecurityEvent.event_type == "authorization.denied",
+                    SecurityEvent.correlation_id == correlation_id,
+                )
+            )
+        ).one()
+    assert event.actor_user_id == user.id
+    assert event.actor_username == user.username
+    assert event.outcome == "DENIED"
+    assert event.user_agent == "permission-audit-test"
+    assert event.metadata_ == {
+        "permission": "inventory.products.read",
+        "resource_type": "inventory",
+        "resource_id": "/api/v1/inventory/balances",
+    }
 
 
 @pytest.mark.integration

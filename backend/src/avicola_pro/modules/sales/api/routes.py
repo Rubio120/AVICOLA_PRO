@@ -1,7 +1,6 @@
 # ruff: noqa: B008
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import date
 from decimal import Decimal
 from importlib import import_module
@@ -139,7 +138,13 @@ class PaymentResponse(BaseModel):
 
 
 def build_sales_router(
-    authentication: AuthenticationService, authorization: Any, database: DatabaseResources, audit: Any, cookie_name: str
+    authentication: AuthenticationService,
+    authorization: Any,
+    database: DatabaseResources,
+    audit: Any,
+    cookie_name: str,
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/sales", tags=["sales"])
 
@@ -151,13 +156,12 @@ def build_sales_router(
         except (InvalidSessionError, SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
-        async def dependency(user: Any = Depends(current_user)) -> Any:
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
-
-        return dependency
+    require = _auth.build_permission_dependency(
+        current_user=current_user,
+        authorization=authorization,
+        security_events=security_events,
+        resource_type="sales",
+    )
 
     async def csrf_user(
         request: Request, _: Any = Depends(current_user), csrf: str | None = Header(default=None, alias=CSRF_HEADER)

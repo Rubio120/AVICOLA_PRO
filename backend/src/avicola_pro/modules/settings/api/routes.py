@@ -1,6 +1,5 @@
 # mypy: ignore-errors
 
-from collections.abc import Awaitable, Callable
 from datetime import date
 from decimal import Decimal
 from importlib import import_module
@@ -107,6 +106,8 @@ def build_settings_router(
     database: DatabaseResources,
     audit: Any,
     cookie_name: str = "avicola_session",
+    *,
+    security_events: Any,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["settings-catalog"])
 
@@ -118,13 +119,17 @@ def build_settings_router(
         except (InvalidSessionError, SessionReuseError):
             raise UnauthorizedError(code="authentication_required", detail="Authentication required") from None
 
-    def require(permission: str) -> Callable[..., Awaitable[UserAccount]]:
-        async def dependency(user: Annotated[UserAccount, Depends(current_user)]) -> UserAccount:
-            if not await authorization.has_permission(user.id, permission):
-                raise ForbiddenError(code="permission_denied", detail="Permission denied")
-            return user
+    def permission_guard(resource_type: str) -> Any:
+        return _auth_api.build_permission_dependency(
+            current_user=current_user,
+            authorization=authorization,
+            security_events=security_events,
+            resource_type=resource_type,
+        )
 
-        return dependency
+    require = permission_guard("settings")
+    require_parties = permission_guard("parties")
+    require_catalog = permission_guard("catalog")
 
     async def csrf_user(
         request: Request,
@@ -270,7 +275,7 @@ def build_settings_router(
     @router.get("/parties/{party_type}")
     async def list_parties(
         party_type: str,
-        user: Annotated[UserAccount, Depends(require("parties.manage"))],
+        user: Annotated[UserAccount, Depends(require_parties("parties.manage"))],
         search: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=100),
@@ -298,7 +303,7 @@ def build_settings_router(
         party_type: str,
         payload: PartyPayload,
         request: Request,
-        user: Annotated[UserAccount, Depends(require("parties.manage"))],
+        user: Annotated[UserAccount, Depends(require_parties("parties.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> dict[str, object]:
         model = Customer if party_type == "customers" else Supplier if party_type == "suppliers" else None
@@ -320,7 +325,7 @@ def build_settings_router(
 
     @router.get("/catalog/categories", response_model=None)
     async def categories(
-        user: Annotated[UserAccount, Depends(require("catalog.read"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.read"))],
         search: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=100),
@@ -344,7 +349,7 @@ def build_settings_router(
     async def create_category(
         payload: CategoryPayload,
         request: Request,
-        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> ProductCategory:
         async with database.session_factory() as session, session.begin():
@@ -359,7 +364,7 @@ def build_settings_router(
 
     @router.get("/catalog/products", response_model=None)
     async def products(
-        user: Annotated[UserAccount, Depends(require("catalog.read"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.read"))],
         search: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=100),
@@ -377,7 +382,7 @@ def build_settings_router(
     async def create_product(
         payload: ProductPayload,
         request: Request,
-        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> Product:
         try:
@@ -395,7 +400,7 @@ def build_settings_router(
         product_id: UUID,
         payload: ProductPayload,
         request: Request,
-        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
         version: int = Query(..., ge=1),
     ) -> Product:
@@ -420,7 +425,7 @@ def build_settings_router(
     async def deactivate_product(
         product_id: UUID,
         request: Request,
-        user: Annotated[UserAccount, Depends(require("catalog.manage"))],
+        user: Annotated[UserAccount, Depends(require_catalog("catalog.manage"))],
         _: Annotated[UserAccount, Depends(csrf_user)],
     ) -> Product:
         async with database.session_factory() as session, session.begin():
