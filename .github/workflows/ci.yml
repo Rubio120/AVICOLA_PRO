@@ -198,6 +198,82 @@ jobs:
             --env AVICOLA_DATABASE_URL_FILE=/run/secrets/database_url \
             --env AVICOLA_SESSION_HMAC_KEY_FILE=/run/secrets/session_hmac_key \
             avicola-pro-backend:ci python -c 'import os; assert os.environ["AVICOLA_DATABASE_URL"].startswith("postgresql+psycopg://"); assert len(os.environ["AVICOLA_SESSION_HMAC_KEY"]) >= 43; assert "AVICOLA_DATABASE_URL_FILE" not in os.environ; print("Secrets loaded; values withheld")'
+      - name: Run isolated Compose application smoke
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p secrets
+          postgres_password="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          session_key="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          printf '%s' "$postgres_password" > secrets/postgres_password
+          printf '%s' "postgresql+psycopg://avicola:${postgres_password}@db:5432/avicola_pro" > secrets/database_url
+          printf '%s' "$session_key" > secrets/session_hmac_key
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          sed -i \
+            -e 's#^BACKEND_IMAGE_REF=.*#BACKEND_IMAGE_REF=avicola-pro-backend:ci#' \
+            -e 's#^FRONTEND_IMAGE_REF=.*#FRONTEND_IMAGE_REF=avicola-pro-frontend:ci#' \
+            -e 's#^BACKUP_IMAGE_REF=.*#BACKUP_IMAGE_REF=avicola-pro-backup:ci#' \
+            deploy/compose/.env.production
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production)
+          rendered="$("${compose[@]}" config --format json)"
+          printf '%s' "$rendered" | python -c 'import json,sys; services=json.load(sys.stdin)["services"]; assert not services["db"].get("ports"), "database must remain private"; assert not services["backend"].get("ports"), "backend must remain private"; print("Database and backend have no host-published ports")'
+          "${compose[@]}" up --detach --wait --wait-timeout 180 db backend frontend
+          migration="$("${compose[@]}" exec -T backend alembic current)"
+          grep -F '0010_costing' <<< "$migration"
+          temporary_password="$("${compose[@]}" exec -T backend avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'CI Synthetic Administrator' | sed -n '/temporal:/s/^[^:]*: //p')"
+          test -n "$temporary_password"
+          "${compose[@]}" exec -T backend python - "$temporary_password" <<'PY'
+          import http.cookiejar
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          base = "http://127.0.0.1:8000"
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+          def request(path, *, method="GET", payload=None, csrf=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {"Content-Type": "application/json"} if data is not None else {}
+              if csrf is not None:
+                  headers["X-CSRF-Token"] = csrf
+              req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+              try:
+                  return opener.open(req, timeout=10)
+              except urllib.error.HTTPError as error:
+                  raise AssertionError(f"{method} {path} returned HTTP {error.code}") from None
+
+          ready = request("/health/ready")
+          assert json.load(ready)["status"] == "ready"
+          initial_password = sys.argv[1]
+          login = request("/api/v1/auth/login", method="POST", payload={"identity": "initial.admin", "password": initial_password})
+          assert json.load(login)["must_change_password"] is True
+          changed = request("/api/v1/auth/change-password", method="POST", payload={"current_password": initial_password, "new_password": "CI-Synthetic-New-Password-2026!"}, csrf=login.headers["X-CSRF-Token"])
+          assert json.load(changed)["must_change_password"] is False
+          assert request("/api/v1/auth/logout", method="POST", csrf=changed.headers["X-CSRF-Token"]).status == 204
+          logged_in = request("/api/v1/auth/login", method="POST", payload={"identity": "initial.admin", "password": "CI-Synthetic-New-Password-2026!"})
+          assert json.load(logged_in)["username"] == "initial.admin"
+          current = request("/api/v1/auth/me")
+          assert json.load(current)["email"] == "initial.admin@example.test"
+          assert request("/api/v1/auth/logout", method="POST", csrf=logged_in.headers["X-CSRF-Token"]).status == 204
+          try:
+              opener.open(base + "/api/v1/auth/me", timeout=10)
+          except urllib.error.HTTPError as error:
+              assert error.code == 401
+          else:
+              raise AssertionError("session remained valid after logout")
+          print("Readiness, migration, synthetic bootstrap, password change, login, session and logout verified")
+          PY
+      - name: Clean isolated Compose application
+        if: always()
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
+          rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key
       - name: Preserve machine-readable image scans
         if: always()
         uses: actions/upload-artifact@v4

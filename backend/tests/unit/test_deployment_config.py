@@ -178,6 +178,34 @@ def test_compose_ci_enables_the_backup_operations_profile() -> None:
     assert "rendered top-level keys" in compose_step["run"]
 
 
+def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    runtime_job = jobs["deployment-images"]
+    smoke = next(step for step in runtime_job["steps"] if step.get("name") == "Run isolated Compose application smoke")
+    cleanup = next(step for step in runtime_job["steps"] if step.get("name") == "Clean isolated Compose application")
+    run_script = smoke["run"]
+    compose_overlay = PROJECT_ROOT / "deploy" / "compose" / "compose.ci.yml"
+    assert compose_overlay.is_file()
+    overlay = yaml.safe_load(compose_overlay.read_text(encoding="utf-8"))
+
+    assert set(overlay["services"]) >= {"db", "migrate", "backend", "frontend"}
+    assert all("ports" not in overlay["services"][name] for name in ("db", "backend"))
+    assert "docker compose" in run_script
+    assert "compose.ci.yml" in run_script
+    assert "assert not services[\"db\"].get(\"ports\")" in run_script
+    assert "assert not services[\"backend\"].get(\"ports\")" in run_script
+    assert "/health/ready" in run_script
+    assert "0010_costing" in run_script
+    assert "bootstrap-admin" in run_script
+    assert "/api/v1/auth/change-password" in run_script
+    assert "/api/v1/auth/login" in run_script
+    assert "/api/v1/auth/me" in run_script
+    assert "/api/v1/auth/logout" in run_script
+    assert cleanup["if"] == "always()"
+    assert "down --volumes --remove-orphans" in cleanup["run"]
+
+
 def test_runtime_images_upgrade_os_packages_during_build() -> None:
     runtime_dockerfiles = (
         PROJECT_ROOT / "backend" / "Dockerfile",

@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16.15-trixie
+    restart: "no"
+
+  migrate:
+    image: avicola-pro-backend:ci
+
+  backend:
+    image: avicola-pro-backend:ci
+    environment:
+      AVICOLA_ENVIRONMENT: test
+      AVICOLA_SESSION_COOKIE_SECURE: "false"
+    restart: "no"
+
+  frontend:
+    image: avicola-pro-frontend:ci
+    restart: "no"
