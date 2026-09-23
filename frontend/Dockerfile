@@ -1,21 +1,23 @@
-FROM node:22.23.2-bookworm-slim AS dependencies
+FROM node:22.23.2-trixie-slim AS dependencies
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-FROM node:22.23.2-bookworm-slim AS builder
+FROM node:22.23.2-trixie-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 BACKEND_INTERNAL_URL=http://backend:8000
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY frontend/ ./
 RUN npm run build
 
-FROM node:22.23.2-bookworm-slim AS runtime
+FROM node:22.23.2-trixie-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade --yes \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 

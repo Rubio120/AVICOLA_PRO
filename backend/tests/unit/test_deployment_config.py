@@ -188,6 +188,45 @@ def test_runtime_images_upgrade_os_packages_during_build() -> None:
     assert all("apt-get upgrade --yes" in dockerfile.read_text(encoding="utf-8") for dockerfile in runtime_dockerfiles)
 
 
+def test_runtime_images_use_current_trixie_bases_for_supported_toolchains() -> None:
+    backend_dockerfile = (PROJECT_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    frontend_dockerfile = (PROJECT_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    backup_dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "FROM python:3.13.15-slim-trixie AS runtime" in backend_dockerfile
+    assert "FROM node:22.23.2-trixie-slim AS runtime" in frontend_dockerfile
+    assert "FROM postgres:16.15-trixie" in backup_dockerfile
+    assert "USER 10001:10001" in backend_dockerfile
+    assert "USER node" in frontend_dockerfile
+    assert "USER 10002:10002" in backup_dockerfile
+
+
+def test_frontend_runtime_removes_unused_node_package_managers() -> None:
+    dockerfile = (PROJECT_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    runtime_stage = dockerfile.split("AS runtime", maxsplit=1)[1]
+
+    assert "/usr/local/lib/node_modules/npm" in runtime_stage
+    assert "/usr/local/lib/node_modules/corepack" in runtime_stage
+    assert "npm ci" not in runtime_stage
+
+
+def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
+    dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "FROM golang:1.26.8-trixie AS restic-builder" in dockerfile
+    assert "ARG RESTIC_VERSION=0.19.1" in dockerfile
+    assert 'refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}' in dockerfile
+    assert 'git rev-parse "v${RESTIC_VERSION}^{commit}"' in dockerfile
+    assert "RESTIC_COMMIT=00e1171de5d2a17f21d2d13f9024ef2956e6afaa" in dockerfile
+    assert "golang.org/x/crypto@v0.55.0" in dockerfile
+    assert "golang.org/x/net@v0.56.0" in dockerfile
+    assert "golang.org/x/text@v0.39.0" in dockerfile
+    assert "google.golang.org/grpc@v1.83.2" in dockerfile
+    assert "go test ./..." in dockerfile
+    assert "COPY --from=restic-builder" in dockerfile
+    assert "COPY --from=restic/restic:" not in dockerfile
+
+
 def test_trivy_sarif_scans_limit_report_severities_to_the_configured_gate() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
     scan_steps = [

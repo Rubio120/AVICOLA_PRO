@@ -1,6 +1,25 @@
-FROM postgres:16.14-bookworm
+FROM golang:1.26.8-trixie AS restic-builder
+ARG RESTIC_VERSION=0.19.1
+ARG RESTIC_COMMIT=00e1171de5d2a17f21d2d13f9024ef2956e6afaa
+WORKDIR /src/restic
+RUN git init \
+    && git remote add origin https://github.com/restic/restic.git \
+    && git fetch --depth 1 origin "refs/tags/v${RESTIC_VERSION}:refs/tags/v${RESTIC_VERSION}" \
+    && test "$(git rev-parse "v${RESTIC_VERSION}^{commit}")" = "${RESTIC_COMMIT}" \
+    && git checkout --detach "${RESTIC_COMMIT}" \
+    && test "$(git rev-parse HEAD)" = "${RESTIC_COMMIT}"
+RUN go mod edit \
+    -require=golang.org/x/crypto@v0.55.0 \
+    -require=golang.org/x/net@v0.56.0 \
+    -require=golang.org/x/text@v0.39.0 \
+    -require=google.golang.org/grpc@v1.83.2 \
+    && go mod tidy
+RUN go test ./... \
+    && CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/restic ./cmd/restic
 
-COPY --from=restic/restic:0.19.1 /usr/bin/restic /usr/local/bin/restic
+FROM postgres:16.15-trixie
+
+COPY --from=restic-builder /out/restic /usr/local/bin/restic
 RUN apt-get update \
     && apt-get upgrade --yes \
     && apt-get install --no-install-recommends --yes python3 ca-certificates \
