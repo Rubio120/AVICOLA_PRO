@@ -210,7 +210,7 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
 
 def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
-    job = workflow["jobs"]["deployment-backup-restore"]
+    job = workflow["jobs"]["deployment-images"]
     steps = job["steps"]
     smoke = next(step for step in steps if step.get("name") == "Run encrypted backup and isolated restore")
     cleanup = next(step for step in steps if step.get("name") == "Clean synthetic backup resources")

@@ -14,7 +14,7 @@ El workflow `quality`, job `deployment-images`, construye y escanea los tres tag
 
 ## Respaldo y restauración sintéticos
 
-El job `deployment-backup-restore` inicializa un repositorio Restic local efímero con contraseña aleatoria, genera un snapshot PostgreSQL cifrado, restaura en `restore-db` bajo un nombre desechable y exige nueve conciliaciones. También prueba que una clave equivocada y un repositorio alterado fallen. La limpieza elimina únicamente el proyecto Compose y las carpetas sintéticas de ese job.
+El job `deployment-images` inicializa un repositorio Restic local efímero con contraseña aleatoria, genera un snapshot PostgreSQL cifrado, restaura en `restore-db` bajo un nombre desechable y exige nueve conciliaciones. También prueba que una clave equivocada y un repositorio alterado fallen. Comparte job con los tags `:ci` recién construidos y escaneados, sin intentar descargar imágenes desde otro job. La limpieza elimina únicamente el proyecto Compose y las carpetas sintéticas de ese job.
 
 - Estado: pendiente de ejecución satisfactoria en CI para un commit que incluya esta prueba.
 - Límite: este ensayo local de CI no prueba almacenamiento off-host, permisos de cuenta externa ni RPO/RTO reales.
