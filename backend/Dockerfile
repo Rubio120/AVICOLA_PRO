@@ -16,7 +16,10 @@ FROM python:3.13.15-slim-bookworm AS runtime
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN groupadd --system --gid 10001 avicola \
+RUN apt-get update \
+    && apt-get upgrade --yes \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 avicola \
     && useradd --system --uid 10001 --gid avicola --home-dir /app --shell /usr/sbin/nologin avicola
 COPY --from=builder --chown=avicola:avicola /opt/venv /opt/venv
 COPY --chown=avicola:avicola deploy/entrypoints/backend.py /app/entrypoints/backend.py

@@ -175,6 +175,17 @@ def test_compose_ci_enables_the_backup_operations_profile() -> None:
     )
 
     assert "--profile operations" in compose_step["run"]
+    assert "rendered top-level keys" in compose_step["run"]
+
+
+def test_runtime_images_upgrade_os_packages_during_build() -> None:
+    runtime_dockerfiles = (
+        PROJECT_ROOT / "backend" / "Dockerfile",
+        PROJECT_ROOT / "frontend" / "Dockerfile",
+        PROJECT_ROOT / "deploy" / "backup" / "Dockerfile",
+    )
+
+    assert all("apt-get upgrade --yes" in dockerfile.read_text(encoding="utf-8") for dockerfile in runtime_dockerfiles)
 
 
 def test_trivy_sarif_scans_limit_report_severities_to_the_configured_gate() -> None:

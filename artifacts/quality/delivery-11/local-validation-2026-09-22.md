@@ -67,3 +67,10 @@ La instrumentación común de esos 403 requiere aprobación del diseño propuest
 - `source-security` generó un SARIF con un solo hallazgo LOW (`DS-0026`, healthcheck del contenedor de backup), pero el formato SARIF incluyó todos los niveles aunque se configuró el umbral HIGH/CRITICAL. El workflow ahora limita severidades del SARIF al umbral; no se ignoran hallazgos HIGH/CRITICAL.
 - `deployment-images` alcanzó solo el primer escaneo antes de detenerse. El SARIF de backend reportó 62 resultados HIGH/CRITICAL repetidos por paquetes Debian 12 del runtime (incluye `libsqlite3-0`, `perl-base` y `zlib1g`) y paquetes Python `msgpack` 1.1.2 / `setuptools` 70.3.0, para los que el reporte indica versiones corregidas 1.2.1 / 78.1.1. Falta escanear frontend y backup de forma completa y remediar/revisar la procedencia de esos resultados antes de aceptar imágenes.
 - Se modificó CI para completar y preservar los tres SARIF incluso si una imagen falla, y fallar al final si cualquier escaneo falla o detecta HIGH/CRITICAL. Las correcciones de workflow pasan las 12 pruebas locales de configuración; falta un nuevo CI remoto.
+
+## Revalidación CI - 2026-09-23 - run 35871086303
+
+- `postgresql-integration`: 209 aprobadas, 1 omitida, cobertura 80,86 %. `windows-toolchains`, `dependency-security` y `source-security`: aprobados.
+- Los tres escaneos de imagen ya se completaron y fallaron por hallazgos HIGH/CRITICAL: backend 62, frontend 67 y backup 162 resultados SARIF. No equivale a 291 CVEs distintos: algunos resultados se repiten por múltiples paquetes/componentes. El gate los conserva y falla correctamente.
+- `deployment-compose` aún falló dentro de la aserción del modelo JSON (`KeyError: networks`); el run siguiente imprimirá solo las claves estructurales renderizadas para ubicar exactamente el acceso incorrecto.
+- Se añadió `apt-get upgrade --yes` durante el build de cada runtime y test local para proteger la actualización de paquetes base; esto todavía no se ha probado con Docker. Las 13 pruebas de configuración local pasan tras los cambios de regresión. No se relaja el gate de CRITICAL/HIGH.
