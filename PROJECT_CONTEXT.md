@@ -26,6 +26,8 @@ Seguimiento 2026-09-23: revisión independiente D11/D12 detectó dos puntos impo
 
 Revalidación integral local 2026-09-23 (supercede la suite parcial): 206/206 backend aprobadas en PostgreSQL 16.14 fresco, 80,86 % cobertura con ramas; migración limpia `0001_baseline` -> `0010_costing`; Ruff check, Ruff format check (186 archivos) y Mypy (131 módulos) aprobados. El clúster de prueba se detuvo y eliminó de forma aislada. El frontend no tuvo cambios en este refuerzo y conserva su resultado previo 47/47. Esta evidencia local no sustituye CI/escaneo de imagen ni staging.
 
+Primer CI remoto para `f3f108a` (run 35869303387): Windows y auditoría de dependencias aprobaron; PostgreSQL no llegó a ejecutar migraciones por una variable HMAC CI ausente, y Compose no incluyó el servicio `backup` porque faltaba activar el perfil `operations`. Ambos defectos del workflow se corrigieron con regresiones. Trivy fuente tuvo un falso bloqueo de umbral porque la salida SARIF incluyó un resultado LOW; se limita el SARIF al umbral configurado. El escaneo backend sí detectó HIGH/CRITICAL en el OS/Python del contenedor. Workflow actualizado para completar los tres escaneos y mantener el gate fail-closed; pasa 12 pruebas locales, pero necesita un nuevo run remoto. Los resultados completos frontend/backup y la remediación/verificación de la imagen backend quedan pendientes. Evidencia detallada en `artifacts/quality/delivery-11/local-validation-2026-09-22.md`.
+
 ## Objetivo y alcance de V1
 
 AVÍCOLA PRO será un sistema empresarial estable, auditable y trazable para administrar integralmente una empresa avícola: configuración, terceros, catálogo, inventario, producción por lotes, compras, ventas, cuentas por pagar/cobrar, caja, costos, rentabilidad y reportes.

@@ -79,6 +79,7 @@ jobs:
         env:
           AVICOLA_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro
           AVICOLA_TEST_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+          AVICOLA_SESSION_HMAC_KEY: ci-only-session-hmac-key-not-for-production-32-bytes-minimum
 
   dependency-security:
     runs-on: ubuntu-latest
@@ -125,6 +126,7 @@ jobs:
           output: trivy-source.sarif
           exit-code: "1"
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
       - name: Preserve machine-readable source scan
         if: always()
         uses: actions/upload-artifact@v4
@@ -146,6 +148,8 @@ jobs:
           test "$(docker image inspect avicola-pro-frontend:ci --format '{{.Config.User}}')" = "node"
           test "$(docker image inspect avicola-pro-backup:ci --format '{{.Config.User}}')" = "10002:10002"
       - name: Scan backend runtime image
+        id: backend_image_scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scanners: vuln
@@ -155,7 +159,10 @@ jobs:
           exit-code: "1"
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
       - name: Scan frontend runtime image
+        id: frontend_image_scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scanners: vuln
@@ -165,7 +172,10 @@ jobs:
           exit-code: "1"
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
       - name: Scan backup runtime image
+        id: backup_image_scan
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scanners: vuln
@@ -175,6 +185,7 @@ jobs:
           exit-code: "1"
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
       - name: Smoke-test backend secret entrypoint in Linux container
         shell: bash
         run: |
@@ -194,6 +205,18 @@ jobs:
           name: image-security-sarif
           path: trivy-*.sarif
           if-no-files-found: ignore
+      - name: Enforce all image security scans
+        if: always()
+        shell: bash
+        env:
+          BACKEND_SCAN_OUTCOME: ${{ steps.backend_image_scan.outcome }}
+          FRONTEND_SCAN_OUTCOME: ${{ steps.frontend_image_scan.outcome }}
+          BACKUP_SCAN_OUTCOME: ${{ steps.backup_image_scan.outcome }}
+        run: |
+          if [[ "$BACKEND_SCAN_OUTCOME" != success || "$FRONTEND_SCAN_OUTCOME" != success || "$BACKUP_SCAN_OUTCOME" != success ]]; then
+            echo "At least one runtime image has a high/critical finding or scan error. Review all uploaded SARIF reports."
+            exit 1
+          fi
 
   deployment-compose:
     runs-on: ubuntu-latest
@@ -209,6 +232,6 @@ jobs:
           printf '%s' 'https://backup.example.invalid/synthetic-repository' > secrets/restic_repository
           printf '%s' 'synthetic-restic-password-not-for-production' > secrets/restic_password
           cp deploy/compose/.env.production.example deploy/compose/.env.production
-          docker compose --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
+          docker compose --profile operations --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
             python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in s["networks"] or not s["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
           rm -f deploy/compose/.env.production

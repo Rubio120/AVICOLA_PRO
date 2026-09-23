@@ -155,6 +155,56 @@ def test_postgres_ci_healthcheck_targets_the_database_created_at_container_start
     assert health_database == bootstrap_database
 
 
+def test_postgres_ci_migration_has_a_synthetic_session_hmac_key() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    postgres_backend = next(
+        step
+        for step in workflow["jobs"]["postgresql-integration"]["steps"]
+        if step.get("name") == "Migrate and test with PostgreSQL 16"
+    )
+
+    assert len(postgres_backend["env"]["AVICOLA_SESSION_HMAC_KEY"]) >= 32
+
+
+def test_compose_ci_enables_the_backup_operations_profile() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    compose_step = next(
+        step
+        for step in workflow["jobs"]["deployment-compose"]["steps"]
+        if step.get("name") == "Render Compose with synthetic secrets and enforce private topology"
+    )
+
+    assert "--profile operations" in compose_step["run"]
+
+
+def test_trivy_sarif_scans_limit_report_severities_to_the_configured_gate() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    scan_steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("aquasecurity/trivy-action@")
+    ]
+
+    assert scan_steps
+    assert all(step.get("with", {}).get("limit-severities-for-sarif") is True for step in scan_steps)
+
+
+def test_image_scans_all_run_before_high_or_critical_findings_fail_ci() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    image_steps = workflow["jobs"]["deployment-images"]["steps"]
+    scan_steps = [step for step in image_steps if step.get("id", "").endswith("_image_scan")]
+    enforcement_step = next(step for step in image_steps if step.get("name") == "Enforce all image security scans")
+
+    assert {step["id"] for step in scan_steps} == {
+        "backend_image_scan",
+        "frontend_image_scan",
+        "backup_image_scan",
+    }
+    assert all(step.get("continue-on-error") is True for step in scan_steps)
+    assert all(f"steps.{step['id']}.outcome" in str(enforcement_step["env"]) for step in scan_steps)
+
+
 def test_partial_ci_backend_suite_does_not_replace_the_full_suite_coverage_gate() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
     jobs = workflow["jobs"]

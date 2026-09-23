@@ -58,3 +58,12 @@ La instrumentación común de esos 403 requiere aprobación del diseño propuest
 - Base de aplicación distinta de la base de pruebas; migración limpia de `0001_baseline` a `0010_costing`. El clúster de validación fue detenido y su directorio temporal dedicado eliminado; puerto confirmado cerrado.
 - Ruff check, Ruff format check (186 archivos) y Mypy (131 módulos fuente) aprobados. La suite de frontend 47/47 y sus gates constan en la validación local previa; no hubo cambios de frontend en esta corrección.
 - Esto sigue siendo evidencia local: no equivale a CI remoto, build/escaneo de imágenes, staging ni aprobación de piloto/producción.
+
+## Primer CI remoto - 2026-09-23 - run 35869303387
+
+- `windows-toolchains` y `dependency-security` aprobaron. `postgresql-integration`, `deployment-compose` y los dos jobs Trivy fallaron.
+- Causa de `postgresql-integration`: el paso de migración no recibía `AVICOLA_SESSION_HMAC_KEY`; el guard de configuración y el workflow ya fueron corregidos con un valor sintético solo para CI. La integración completa local 206/206 sí pasó.
+- Causa de `deployment-compose`: el smoke no activaba el perfil Compose `operations`, así que la definición omitía el servicio `backup`; se añadió `--profile operations` y un test de regresión.
+- `source-security` generó un SARIF con un solo hallazgo LOW (`DS-0026`, healthcheck del contenedor de backup), pero el formato SARIF incluyó todos los niveles aunque se configuró el umbral HIGH/CRITICAL. El workflow ahora limita severidades del SARIF al umbral; no se ignoran hallazgos HIGH/CRITICAL.
+- `deployment-images` alcanzó solo el primer escaneo antes de detenerse. El SARIF de backend reportó 62 resultados HIGH/CRITICAL repetidos por paquetes Debian 12 del runtime (incluye `libsqlite3-0`, `perl-base` y `zlib1g`) y paquetes Python `msgpack` 1.1.2 / `setuptools` 70.3.0, para los que el reporte indica versiones corregidas 1.2.1 / 78.1.1. Falta escanear frontend y backup de forma completa y remediar/revisar la procedencia de esos resultados antes de aceptar imágenes.
+- Se modificó CI para completar y preservar los tres SARIF incluso si una imagen falla, y fallar al final si cualquier escaneo falla o detecta HIGH/CRITICAL. Las correcciones de workflow pasan las 12 pruebas locales de configuración; falta un nuevo CI remoto.
