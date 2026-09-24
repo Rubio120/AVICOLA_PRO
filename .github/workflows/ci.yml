@@ -231,9 +231,9 @@ jobs:
           rendered="$("${compose[@]}" config --format json)"
           printf '%s' "$rendered" | python -c 'import json,sys; services=json.load(sys.stdin)["services"]; assert not services["db"].get("ports"), "database must remain private"; assert not services["backend"].get("ports"), "backend must remain private"; print("Database and backend have no host-published ports")'
           "${compose[@]}" up --detach --wait --wait-timeout 180 db backend frontend
-          migration="$("${compose[@]}" exec -T backend alembic current)"
+          migration="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py alembic current)"
           grep -F '0013_sales_channel' <<< "$migration"
-          temporary_password="$("${compose[@]}" exec -T backend avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'CI Synthetic Administrator' | sed -n '/temporal:/s/^[^:]*: //p')"
+          temporary_password="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'CI Synthetic Administrator' | sed -n '/temporal:/s/^[^:]*: //p')"
           test -n "$temporary_password"
           "${compose[@]}" exec -T backend python - "$temporary_password" <<'PY'
           import http.cookiejar

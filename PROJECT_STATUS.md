@@ -4,7 +4,7 @@
 
 Validacion local del cambio de indicadores: backend 316/316 pruebas aprobadas, cobertura total 80.09%; frontend 56/56, lint, TypeScript y build de produccion aprobados. Los indicadores implementados usan solo hechos confirmados y muestran como no disponibles los datos faltantes. No se calcula costo total por huevo ni margen de canal hasta aprobar sus politicas.
 
-D11 y D12 siguen ABIERTAS: el run remoto `36036117303` del SHA `3a4a1eb` paso Windows, PostgreSQL, dependencias, topologia Compose y construccion de imagenes, pero fallo porque la imagen backend no incluia `alembic.ini`/`migrations`, y Trivy reporto HIGH/CRITICAL en las tres imagenes. La causa de migracion esta corregida en el arbol local y falta verificarla en un nuevo run. Backup/restore y bundle de release aun no corrieron. No se desplego el sistema; no esta certificado para produccion.
+D11 y D12 siguen ABIERTAS: el run `36038140398` del SHA `413dbb6` construyo las imagenes, migro PostgreSQL y paso los gates Windows, PostgreSQL, dependencias, fuente y topologia Compose. Fallo despues porque el smoke ejecuto `alembic current` y el bootstrap directamente, omitiendo el cargador de secretos del contenedor; ambas llamadas ya pasan por el entrypoint y esperan otro CI. Trivy sigue fallando HIGH/CRITICAL en las tres imagenes; backup/restore y bundle de release aun estan bloqueados por el gate. No se desplego el sistema; no esta certificado para produccion.
 
 ## Última actualización
 

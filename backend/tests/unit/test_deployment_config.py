@@ -199,6 +199,8 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
     assert 'assert not services["backend"].get("ports")' in run_script
     assert "/health/ready" in run_script
     assert "0013_sales_channel" in run_script
+    assert "python /app/entrypoints/backend.py alembic current" in run_script
+    assert "python /app/entrypoints/backend.py avicola-pro bootstrap-admin" in run_script
     assert "bootstrap-admin" in run_script
     assert "/api/v1/auth/change-password" in run_script
     assert "/api/v1/auth/login" in run_script
