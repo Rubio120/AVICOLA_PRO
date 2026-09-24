@@ -223,6 +223,7 @@ def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database()
     assert "initialize_repository" in script
     assert "backup" in script and "restore" in script
     assert "RESTORE_TARGET_DATABASE_NAME" in script
+    assert "python /app/entrypoints/backend.py avicola-pro bootstrap-admin" in script
     assert 'test "$source_database_url" != "$restore_target_database_url"' in script
     assert "nine checks" in script.lower() or "9 checks" in script
     assert "wrong" in script.lower()

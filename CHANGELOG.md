@@ -12,6 +12,7 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 - CI conserva logs del servicio de migraciones de Compose, sanitizando contraseñas en URLs para diagnóstico de fallos.
 - Imagen runtime de backend incluye `alembic.ini` y migraciones, necesarios para que el servicio Compose `migrate` pueda ejecutar upgrades.
 - Smoke CI consulta la revisión Alembic y crea el administrador sintético a través del cargador de secretos de la imagen.
+- El job de backup CI también crea su administrador sintético a través del entrypoint de secretos antes de verificar la restauración.
 - Validacion local adicional D11/D12 en PostgreSQL sintetico: migracion limpia, upgrade, smoke local y evidencia en `artifacts/quality/delivery-11/local-validation-2026-09-22.md`; no sustituye CI/staging/off-host.
 - Preparación D11: imágenes backend/frontend no-root, Caddy/TLS, Compose privado con migración previa, backup/restauración Restic cifrados, reconciliación y runbooks.
 - Smoke configurable de disponibilidad/rendimiento con camino autenticado opcional mediante cuenta sintética.

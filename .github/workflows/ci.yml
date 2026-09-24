@@ -324,7 +324,7 @@ jobs:
             deploy/compose/.env.production
           compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production)
           "${compose[@]}" up --detach --wait --wait-timeout 180 db backend restore-db
-          bootstrap_output="$("${compose[@]}" exec -T backend avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'Synthetic Backup Administrator' 2>/dev/null)"
+          bootstrap_output="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'Synthetic Backup Administrator' 2>/dev/null)"
           temporary_password="$(sed -n '/temporal:/s/^[^:]*: //p' <<< "$bootstrap_output")"
           test -n "$temporary_password"
           unset temporary_password bootstrap_output
