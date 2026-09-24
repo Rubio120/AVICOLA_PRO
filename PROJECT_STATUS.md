@@ -1,6 +1,14 @@
 # Estado de AVÍCOLA PRO
 
-## Estado actual - 2026-09-24
+## Actualización prioritaria - 2026-09-24
+
+El commit `49fc5ff` está publicado en `weekend/autonomous`. Añade pruebas de PostgreSQL para indicadores, alinea el manifest/gate/documentación de D12 con la migración vigente `0013_sales_channel` y hace que el build de respaldo verifique la versión Go embebida en Restic. Verificación local: 274 pruebas backend no-integration aprobadas; 52 pruebas enfocadas de entrega, inventario y toolchain aprobadas; Ruff y `git diff --check` aprobados. Las cuatro pruebas de indicadores se recolectan, pero no se ejecutaron localmente porque esta máquina no tiene PostgreSQL/Docker configurados.
+
+El CI anterior (`36045571833`, SHA `18551f7`) pasó Windows, PostgreSQL, dependencias, código fuente, Compose, backup y restauración aislada (9 conciliaciones). El gate de Trivy falló en las tres imágenes por hallazgos HIGH/CRITICAL; por eso no exportó imágenes ni generó el bundle/attestation de D12. El CI del commit `49fc5ff` debe confirmar estos cambios. D11/D12 siguen abiertas, no hay aprobación técnica para despliegue y el ZIP de prueba final aún no está generado.
+
+Pendientes funcionales: la revisión estática halló que la prueba de cobertura espera 270 días mientras el lector aún devuelve la métrica como no disponible; falta fijar la fuente de ventas de 30 días (salidas de inventario confirmadas o facturas netas de notas de crédito) y ejecutar en PostgreSQL. También implementar y probar las reglas acordadas de historial/reversión de clasificación de huevos, y definir las políticas de costo total por huevo y margen de canal antes de ofrecer esos indicadores. Sin despliegue ni pruebas en staging/off-host. No se debe afirmar preparación para producción mientras el gate de seguridad esté rojo.
+
+## Estado anterior - 2026-09-24 (reemplazado por la actualización prioritaria)
 
 Validacion local del cambio de indicadores: backend 316/316 pruebas aprobadas, cobertura total 80.09%; frontend 56/56, lint, TypeScript y build de produccion aprobados. Los indicadores implementados usan solo hechos confirmados y muestran como no disponibles los datos faltantes. No se calcula costo total por huevo ni margen de canal hasta aprobar sus politicas.
 
@@ -10,7 +18,7 @@ D11 y D12 siguen ABIERTAS: en el run `36039526802` del SHA `7fa4d34`, el smoke d
 
 2026-09-23 - Entregas 0-10 cerradas. D11/D12 siguen sin cierre certificado: el último run `35890371500` pasó Windows, PostgreSQL, dependencias, código fuente y render Compose, pero `deployment-images` falló en las pruebas upstream de Restic, por lo que scans, Compose runtime, backup/restore y bundle/attestation fueron omitidos. En local, 246/246 pruebas backend pasaron en PostgreSQL 16 con 80,86 % cobertura; Ruff/formato/Mypy y pip-audit pasaron. Frontend lint, TypeScript, build y npm audit pasaron; Vitest local fue bloqueado por acceso de esbuild fuera del workspace, debe confirmarlo CI. Gate D12 ya valida bundle firmado, hashes, SBOM, SARIF, commit/ref/tag y edad. Falta CI fresco del SHA final. Sin despliegue; no hay registry digest, restore off-host ni aprobación RPO/RTO.
 
-## Estado vigente - 2026-09-23
+## Estado histórico - 2026-09-23
 
 El plan tiene 13 entregas numeradas 0-12: la Entrega 0 es documental y las otras 12 son entregas de producto. Entregas 0-10 están cerradas. Se revalidó la idempotencia de pagos de Entrega 6 y se corrigió el BFF para Tesorería, Costos e Informes.
 

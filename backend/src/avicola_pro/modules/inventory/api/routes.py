@@ -300,6 +300,11 @@ def build_inventory_router(
             )
             if product is None:
                 raise ForbiddenError(code="invalid_egg_category", detail="An active inventory product is required")
+            if product.base_unit_code != "unit":
+                raise ForbiddenError(
+                    code="invalid_egg_category",
+                    detail="Egg category product must use the individual egg unit",
+                )
             if await session.scalar(select(EggCategory.id).where(EggCategory.code == payload.code)) is not None:
                 raise ForbiddenError(code="invalid_egg_category", detail="Egg category code is already in use")
             if await session.scalar(select(EggCategory.id).where(EggCategory.product_id == product.id)) is not None:
