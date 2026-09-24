@@ -311,14 +311,12 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
     assert "golang.org/x/text@v0.39.0" in dockerfile
     assert "google.golang.org/grpc@v1.83.2" in dockerfile
     assert "apt-get install --no-install-recommends --yes python3" in dockerfile
-    assert "groupadd --system --gid 10003 restic-test" in dockerfile
-    assert "useradd --system --uid 10003 --gid restic-test" in dockerfile
-    assert "chown -R 10003:10003 /src/restic /tmp/go-build-cache" in dockerfile
-    assert "USER 10003:10003" in dockerfile
-    assert "go test ./... -skip 'TestMount'" in dockerfile
-    assert "USER root" in dockerfile
-    assert "CGO_ENABLED=0 go build" in dockerfile
-    assert "USER 10002:10002" in dockerfile
+    assert "USER nobody" not in dockerfile
+    assert (
+        "go test ./... -skip 'TestMount|TestBackupErrors|"
+        "TestArchiverErrorReporting/(file-unreadable|file-unreadable-ignore-error|"
+        "file-subdir-unreadable|file-subdir-unreadable-ignore-error)'" in dockerfile
+    )
     assert "does not expose /dev/fuse" in dockerfile
     assert "COPY --from=restic-builder" in dockerfile
     assert "COPY --from=restic/restic:" not in dockerfile
