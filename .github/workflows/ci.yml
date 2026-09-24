@@ -367,6 +367,9 @@ jobs:
         run: |
           docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
           rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key secrets/restic_repository secrets/restic_password secrets/restore_target_database_url secrets/restic_wrong_password
+          if [ -d .ci-restic ]; then
+            docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /bin/chmod avicola-pro-backup:ci -R a+rwX /tmp/restic || true
+          fi
           rm -rf .ci-restic .ci-restic-corrupt
       - name: Preserve synthetic backup and restore evidence
         if: always()

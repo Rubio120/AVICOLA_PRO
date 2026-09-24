@@ -226,10 +226,12 @@ def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database()
     assert "python /app/entrypoints/backend.py avicola-pro bootstrap-admin" in script
     assert 'test "$source_database_url" != "$restore_target_database_url"' in script
     assert "nine checks" in script.lower() or "9 checks" in script
+    assert "grep -F 'Restore reconciliation passed (9 checks)'" in script
     assert "wrong" in script.lower()
     assert "corrupt" in script.lower()
     assert cleanup["if"] == "always()"
     assert "down --volumes --remove-orphans" in cleanup["run"]
+    assert "chmod" in cleanup["run"]
     assert any(step.get("uses", "").startswith("actions/upload-artifact@") for step in steps)
 
 

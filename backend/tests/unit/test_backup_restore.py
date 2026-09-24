@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from deploy.backup import restore as restore_module  # noqa: E402
 from deploy.backup.backup import _restic_environment  # noqa: E402
 from deploy.backup.db_connection import (  # noqa: E402
     DatabaseUrlError,
@@ -161,3 +163,43 @@ def test_restore_target_requires_another_explicitly_disposable_database_and_full
         except ValueError:
             continue
         raise AssertionError("unsafe or ambiguous restore targets must be rejected")
+
+
+def test_restore_reports_reconciliation_evidence_after_successful_verification(
+    monkeypatch, capsys
+) -> None:
+    source = "postgresql+psycopg://app:secret@db:5432/avicola_pro"
+    target = "postgresql+psycopg://restore:secret@restore-db:5432/avicola_restore_drill"
+    snapshot_id = "a" * 64
+    monkeypatch.setattr(
+        restore_module,
+        "read_secret_file",
+        lambda name, _value, _environment: source if name == "AVICOLA_DATABASE_URL_FILE" else target,
+    )
+    monkeypatch.setattr(restore_module, "_target_is_empty", lambda _environment, _timeout: True)
+
+    def successful_command(arguments, **_kwargs):
+        if arguments[0] == restore_module.RESTIC and arguments[1] == "restore":
+            archive = Path(arguments[arguments.index("--target") + 1]) / restore_module.ARCHIVE_NAME
+            archive.write_bytes(b"synthetic postgres archive")
+        if arguments[0] == restore_module.PYTHON:
+            return subprocess.CompletedProcess(
+                arguments, 0, stdout="Restore reconciliation passed (9 checks)\n", stderr=""
+            )
+        return subprocess.CompletedProcess(arguments, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(restore_module.subprocess, "run", successful_command)
+    monkeypatch.setattr(
+        restore_module,
+        "_restic_environment",
+        lambda: {
+            "RESTIC_PASSWORD_FILE": "unused",
+            "RESTORE_TARGET_DATABASE_NAME": "avicola_restore_drill",
+            "RESTORE_SNAPSHOT_ID": snapshot_id,
+        },
+    )
+
+    assert restore_module.main() == 0
+    output = capsys.readouterr().out
+    assert "Restore reconciliation passed (9 checks)" in output
+    assert "restore_status=verified" in output

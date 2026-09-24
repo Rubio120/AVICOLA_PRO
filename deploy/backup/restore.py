@@ -171,6 +171,7 @@ def main() -> int:
             )
             if verification.returncode != 0:
                 raise RuntimeError("Restored database failed reconciliation")
+            print(verification.stdout.strip())
 
         print(
             f"restore_status=verified snapshot_id={snapshot_id} archive_sha256={archive_hash.hexdigest()} "
