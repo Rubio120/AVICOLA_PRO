@@ -23,6 +23,8 @@ RUN apt-get update \
     && useradd --system --uid 10001 --gid avicola --home-dir /app --shell /usr/sbin/nologin avicola
 COPY --from=builder --chown=avicola:avicola /opt/venv /opt/venv
 COPY --chown=avicola:avicola deploy/entrypoints/backend.py /app/entrypoints/backend.py
+COPY --chown=avicola:avicola backend/alembic.ini /app/alembic.ini
+COPY --chown=avicola:avicola backend/migrations /app/migrations
 
 USER 10001:10001
 EXPOSE 8000

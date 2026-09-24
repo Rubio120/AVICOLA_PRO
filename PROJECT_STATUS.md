@@ -4,7 +4,7 @@
 
 Validacion local del cambio de indicadores: backend 316/316 pruebas aprobadas, cobertura total 80.09%; frontend 56/56, lint, TypeScript y build de produccion aprobados. Los indicadores implementados usan solo hechos confirmados y muestran como no disponibles los datos faltantes. No se calcula costo total por huevo ni margen de canal hasta aprobar sus politicas.
 
-D11 y D12 siguen ABIERTAS: falta CI remota verde para el SHA final, resolver sin excepciones los hallazgos HIGH/CRITICAL de las imagenes, verificar Compose/migracion/backup/restauracion y confirmar el bundle de release. El fallo de migracion anterior requiere evidencia del siguiente run. No se desplego el sistema; no esta certificado para produccion.
+D11 y D12 siguen ABIERTAS: el run remoto `36036117303` del SHA `3a4a1eb` paso Windows, PostgreSQL, dependencias, topologia Compose y construccion de imagenes, pero fallo porque la imagen backend no incluia `alembic.ini`/`migrations`, y Trivy reporto HIGH/CRITICAL en las tres imagenes. La causa de migracion esta corregida en el arbol local y falta verificarla en un nuevo run. Backup/restore y bundle de release aun no corrieron. No se desplego el sistema; no esta certificado para produccion.
 
 ## Última actualización
 

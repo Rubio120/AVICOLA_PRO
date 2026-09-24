@@ -289,6 +289,14 @@ def test_runtime_images_use_current_trixie_bases_for_supported_toolchains() -> N
     assert "USER 10002:10002" in backup_dockerfile
 
 
+def test_backend_runtime_contains_alembic_config_and_migrations() -> None:
+    dockerfile = (PROJECT_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    runtime_stage = dockerfile.split("AS runtime", maxsplit=1)[1]
+
+    assert "COPY --chown=avicola:avicola backend/alembic.ini /app/alembic.ini" in runtime_stage
+    assert "COPY --chown=avicola:avicola backend/migrations /app/migrations" in runtime_stage
+
+
 def test_frontend_runtime_removes_unused_node_package_managers() -> None:
     dockerfile = (PROJECT_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
     runtime_stage = dockerfile.split("AS runtime", maxsplit=1)[1]
