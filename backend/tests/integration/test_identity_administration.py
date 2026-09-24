@@ -54,7 +54,7 @@ def clean_database() -> Iterator[None]:
             "commercial_document_relations, commercial_document_lines, commercial_documents, "
             "sales_delivery_lines, sales_deliveries, sales_order_lines, sales_orders, "
             "cash_transfers, cash_movements, cash_sessions, cash_accounts, "
-            "users, document_sequences, products restart identity"
+            "users, document_sequences, products restart identity cascade"
         )
         cursor.execute(
             "insert into role_permissions (role_id, permission_id) "

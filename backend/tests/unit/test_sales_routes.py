@@ -51,6 +51,23 @@ def test_invoice_channel_is_required_and_credit_note_channel_can_be_inherited() 
     assert credit_note.channel is None
 
 
+def test_sales_router_exposes_reference_options_for_order_creation() -> None:
+    router = build_sales_router(
+        object(),
+        object(),
+        cast(DatabaseResources, SimpleNamespace(session_factory=object())),
+        SimpleNamespace(add=lambda *_: None),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
+    assert any(
+        isinstance(route, APIRoute)
+        and route.path == "/api/v1/sales/order-options"
+        and "GET" in (route.methods or set())
+        for route in router.routes
+    )
+
+
 @pytest.mark.asyncio
 async def test_create_sales_order_endpoint_persists_and_audits() -> None:
     class Session:

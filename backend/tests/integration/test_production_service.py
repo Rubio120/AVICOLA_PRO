@@ -189,6 +189,7 @@ async def test_egg_production_classification_posts_atomic_stock_and_is_idempoten
         session.add(House(id=house_id, farm_id=farm_id, code="H-CLASS", name="Classification house", capacity=100))
         session.add(Warehouse(id=warehouse_id, code="WH-CLASS", name="Classification warehouse", is_active=True))
         session.add(UnitOfMeasure(code="egg_unit", name="Synthetic individual egg", precision=0))
+        await session.flush()
         session.add(
             Product(
                 id=product_id,

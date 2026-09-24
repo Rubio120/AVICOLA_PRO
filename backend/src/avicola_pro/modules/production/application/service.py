@@ -110,6 +110,7 @@ class ProductionService:
             id=uuid4(), flock_id=flock_id, house_id=house_id, valid_from=valid_from, quantity=quantity
         )
         session.add(assignment)
+        await session.flush()
         return assignment
 
     async def record_mortality(

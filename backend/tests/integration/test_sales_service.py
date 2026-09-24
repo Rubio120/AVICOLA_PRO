@@ -78,6 +78,7 @@ async def test_issue_internal_document_creates_ar_and_payment_closes_it() -> Non
             {
                 "customer_id": customer_id,
                 "document_type": "INVOICE",
+                "channel": "WHOLESALE",
                 "series": "A",
                 "document_date": date(2026, 9, 19),
                 "lines": [

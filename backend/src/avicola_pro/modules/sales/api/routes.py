@@ -19,6 +19,8 @@ from avicola_pro.shared.infrastructure.database import DatabaseResources
 _identity = import_module("avicola_pro.modules.identity.application.authentication")
 _auth = import_module("avicola_pro.modules.identity.api.auth")
 _models = import_module("avicola_pro.modules.sales.infrastructure.models")
+_party_models = import_module("avicola_pro.modules.parties.infrastructure.models")
+_catalog_models = import_module("avicola_pro.modules.catalog.infrastructure.models")
 AuthenticationService: Any = _identity.AuthenticationService
 InvalidSessionError = _identity.InvalidSessionError
 SessionReuseError = _identity.SessionReuseError
@@ -32,6 +34,8 @@ SalesDeliveryLine: Any = _models.SalesDeliveryLine
 CommercialDocument: Any = _models.CommercialDocument
 CustomerPayment: Any = _models.CustomerPayment
 CustomerPaymentAllocation: Any = _models.CustomerPaymentAllocation
+Customer: Any = _party_models.Customer
+Product: Any = _catalog_models.Product
 
 
 class StrictModel(BaseModel):
@@ -116,6 +120,23 @@ class OrderResponse(BaseModel):
     channel: str | None
     status: str
     total: Decimal
+
+
+class SalesCustomerOption(BaseModel):
+    id: UUID
+    code: str
+    name: str
+
+
+class SalesProductOption(BaseModel):
+    id: UUID
+    sku: str
+    name: str
+
+
+class OrderOptionsResponse(BaseModel):
+    customers: list[SalesCustomerOption]
+    products: list[SalesProductOption]
 
 
 class DeliveryResponse(BaseModel):
@@ -209,6 +230,24 @@ def build_sales_router(
                 OrderResponse.model_validate(item)
                 for item in (await session.scalars(select(SalesOrder).order_by(SalesOrder.order_date.desc()))).all()
             ]
+
+    @router.get("/order-options", response_model=OrderOptionsResponse)
+    async def order_options(_: Any = Depends(require("sales.orders.create"))) -> OrderOptionsResponse:
+        async with database.session_factory() as session:
+            customers = (
+                await session.scalars(
+                    select(Customer).where(Customer.is_active.is_(True)).order_by(Customer.name).limit(500)
+                )
+            ).all()
+            products = (
+                await session.scalars(
+                    select(Product).where(Product.is_active.is_(True)).order_by(Product.name).limit(500)
+                )
+            ).all()
+            return OrderOptionsResponse(
+                customers=[SalesCustomerOption.model_validate(item) for item in customers],
+                products=[SalesProductOption.model_validate(item) for item in products],
+            )
 
     @router.post("/orders", response_model=OrderResponse, status_code=201)
     async def create_order(
