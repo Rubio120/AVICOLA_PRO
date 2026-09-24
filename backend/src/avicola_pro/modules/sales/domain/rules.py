@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
+from enum import StrEnum
 
 
 class SalesConflictError(ValueError):
     pass
+
+
+class SalesChannel(StrEnum):
+    WHOLESALE = "WHOLESALE"
+    RETAIL = "RETAIL"
 
 
 CENT = Decimal("0.01")

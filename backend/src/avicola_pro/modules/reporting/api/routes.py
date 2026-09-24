@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict
 
-from avicola_pro.modules.reporting.domain.rules import ReportFilter, build_csv
+from avicola_pro.modules.reporting.domain.rules import ReportFilter, build_csv, build_xlsx
 from avicola_pro.shared.api.errors import ForbiddenError, UnauthorizedError
 
 
@@ -28,10 +28,11 @@ class DashboardResponse(BaseModel):
 class ProfitabilityRow(BaseModel):
     id: UUID
     date: date
+    document_type: str
     customer: str
     revenue: str
-    cost: str
-    margin: str
+    cost: str | None
+    margin: str | None
 
 
 class PageResponse(BaseModel):
@@ -39,6 +40,14 @@ class PageResponse(BaseModel):
     offset: int
     limit: int
     total: int
+
+
+class CommercialSalesRow(BaseModel):
+    channel: str
+    invoices: int
+    credit_notes: int
+    customers_with_documents: int
+    net_revenue: str
 
 
 def build_reporting_router(
@@ -81,7 +90,7 @@ def build_reporting_router(
 
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    def audit_export(session: Any, user: Any, request: Request, report_name: str) -> None:
+    def audit_export(session: Any, user: Any, request: Request, report_name: str, export_format: str = "csv") -> None:
         record = import_module("avicola_pro.modules.audit.application.writer").AuditRecord
         audit.add(
             session,
@@ -95,7 +104,7 @@ def build_reporting_router(
                 request.client.host if request.client else None,
                 request.headers.get("user-agent"),
                 None,
-                {"format": "csv"},
+                {"format": export_format},
             ),
         )
 
@@ -118,11 +127,29 @@ def build_reporting_router(
             items, total = await reader.profitability(session, report_filters)
             rows = [
                 ProfitabilityRow(
-                    **{key: str(value) if key not in {"id", "date"} else value for key, value in item.items()}
+                    **{
+                        key: value if key in {"id", "date"} or value is None else str(value)
+                        for key, value in item.items()
+                    }
                 )
                 for item in items
             ]
             return PageResponse(items=rows, offset=report_filters.offset, limit=report_filters.limit, total=total)
+
+    @router.get("/commercial", response_model=list[CommercialSalesRow])
+    async def commercial_sales(
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        channel: str | None = Query(default=None, pattern=r"^(WHOLESALE|RETAIL)$"),
+        _: Any = Depends(require("reports.profitability.read")),
+    ) -> list[CommercialSalesRow]:
+        if date_from and date_to and date_from > date_to:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail="date_from cannot be after date_to")
+        async with database.session_factory() as session:
+            rows = await reader.commercial_sales(session, date_from, date_to, channel)
+        return [CommercialSalesRow(**{**item, "net_revenue": str(item["net_revenue"])}) for item in rows]
 
     @router.get("/profitability.csv")
     async def profitability_csv(
@@ -141,14 +168,47 @@ def build_reporting_router(
         async with database.session_factory() as session, session.begin():
             items, _ = await reader.profitability(session, export_filters)
             csv_body = build_csv(
-                ["id", "date", "customer", "revenue", "cost", "margin"],
-                [[item[key] for key in ("id", "date", "customer", "revenue", "cost", "margin")] for item in items],
+                ["id", "date", "document_type", "customer", "revenue", "cost", "margin"],
+                [
+                    [item[key] for key in ("id", "date", "document_type", "customer", "revenue", "cost", "margin")]
+                    for item in items
+                ],
             )
             audit_export(session, user, request, "profitability")
         return Response(
             content=csv_body,
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=profitability.csv"},
+        )
+
+    @router.get("/profitability.xlsx")
+    async def profitability_xlsx(
+        request: Request,
+        report_filters: ReportFilter = Depends(filters),
+        user: Any = Depends(require("reports.export")),
+    ) -> Response:
+        if report_filters.offset > 1000:
+            raise ForbiddenError(code="export_limit_exceeded", detail="Excel export is limited to 1000 rows")
+        export_filters = ReportFilter(
+            date_from=report_filters.date_from,
+            date_to=report_filters.date_to,
+            offset=report_filters.offset,
+            limit=min(report_filters.limit, report_filters.export_limit),
+        )
+        async with database.session_factory() as session, session.begin():
+            items, _ = await reader.profitability(session, export_filters)
+            workbook = build_xlsx(
+                ["id", "date", "document_type", "customer", "revenue", "cost", "margin"],
+                [
+                    [item[key] for key in ("id", "date", "document_type", "customer", "revenue", "cost", "margin")]
+                    for item in items
+                ],
+            )
+            audit_export(session, user, request, "profitability", "xlsx")
+        return Response(
+            content=workbook,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=profitability.xlsx"},
         )
 
     return router

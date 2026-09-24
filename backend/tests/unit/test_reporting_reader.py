@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from avicola_pro.modules.reporting.domain.rules import ReportFilter
+from avicola_pro.modules.reporting.domain.rules import ReportFilter, build_xlsx
 from avicola_pro.modules.reporting.infrastructure import reader
 
 
@@ -74,8 +74,9 @@ async def test_profitability_returns_paged_issued_documents() -> None:
                     {
                         "id": document_id,
                         "document_date": date(2026, 1, 2),
+                        "document_type": "INVOICE",
                         "customer_name_snapshot": "Cliente sintético",
-                        "total": Decimal("55.00"),
+                        "net_total": Decimal("55.00"),
                     }
                 ]
             ),
@@ -86,6 +87,55 @@ async def test_profitability_returns_paged_issued_documents() -> None:
 
     assert total == 3
     assert rows[0]["id"] == document_id
-    assert rows[0]["margin"] == Decimal("55.00")
+    assert rows[0]["document_type"] == "INVOICE"
+    assert rows[0]["revenue"] == Decimal("55.00")
+    assert rows[0]["cost"] is None
+    assert rows[0]["margin"] is None
     assert session.statements[1][1] is not None
     assert session.statements[1][1]["offset"] == 1
+
+
+@pytest.mark.asyncio
+async def test_commercial_sales_separates_channels_and_nets_issued_credit_notes() -> None:
+    session = FakeSession(
+        [
+            FakeResult(
+                mappings=[
+                    {
+                        "channel": "WHOLESALE",
+                        "invoices": 4,
+                        "credit_notes": 1,
+                        "customers_with_documents": 3,
+                        "net_revenue": Decimal("850.00"),
+                    }
+                ]
+            )
+        ]
+    )
+
+    rows = await reader.commercial_sales(session, date(2026, 1, 1), date(2026, 1, 31), "WHOLESALE")
+
+    assert rows[0]["channel"] == "WHOLESALE"
+    assert rows[0]["net_revenue"] == Decimal("850.00")
+    statement, params = session.statements[0]
+    assert "CREDIT_NOTE" in str(statement)
+    assert "ISSUED" in str(statement)
+    assert params == {"date_from": date(2026, 1, 1), "date_to": date(2026, 1, 31), "channel": "WHOLESALE"}
+
+
+def test_xlsx_is_open_xml_and_never_turns_user_strings_into_formulas() -> None:
+    import io
+    from zipfile import ZipFile
+
+    workbook = build_xlsx(
+        ["customer", "amount"],
+        [["=1+1", Decimal("12.50")]],
+    )
+
+    with ZipFile(io.BytesIO(workbook)) as archive:
+        assert {"[Content_Types].xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml"} <= set(archive.namelist())
+        worksheet = archive.read("xl/worksheets/sheet1.xml")
+    assert b't="inlineStr"' in worksheet
+    assert b"=1+1" in worksheet
+    assert b"12.50" in worksheet
+    assert b"<f>" not in worksheet

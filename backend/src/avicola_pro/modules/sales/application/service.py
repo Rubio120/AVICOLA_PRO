@@ -6,6 +6,7 @@ from importlib import import_module
 from typing import Any
 from uuid import UUID, uuid4
 
+from avicola_pro.modules.inventory.domain.egg_units import validate_egg_category_saleable
 from avicola_pro.modules.sales.domain.rules import (
     SalesConflictError,
     apply_customer_payment,
@@ -30,6 +31,7 @@ Customer: Any = import_module("avicola_pro.modules.parties.infrastructure.models
 DocumentSequence: Any = import_module("avicola_pro.modules.settings.infrastructure.models").DocumentSequence
 InventoryDocument: Any = import_module("avicola_pro.modules.inventory.infrastructure.models").InventoryDocument
 InventoryDocumentLine: Any = import_module("avicola_pro.modules.inventory.infrastructure.models").InventoryDocumentLine
+EggCategory: Any = import_module("avicola_pro.modules.inventory.infrastructure.models").EggCategory
 inventory_service: Any = import_module("avicola_pro.modules.inventory.application.service").inventory_service
 
 
@@ -45,13 +47,34 @@ class DisabledFiscalProvider:
 
 
 class SalesService:
-    async def create_order(self, session: Any, customer_id: UUID, order_date: date, lines: list[dict[str, Any]]) -> Any:
+    async def _ensure_egg_products_are_saleable(self, session: Any, product_ids: set[UUID]) -> None:
+        if not product_ids:
+            return
+        categories = list(
+            (
+                await session.scalars(
+                    select(EggCategory).where(EggCategory.product_id.in_(product_ids)).with_for_update()
+                )
+            ).all()
+        )
+        for category in categories:
+            try:
+                validate_egg_category_saleable(is_active=category.is_active, is_saleable=category.is_saleable)
+            except ValueError as exc:
+                raise SalesConflictError(str(exc)) from exc
+
+    async def create_order(
+        self, session: Any, customer_id: UUID, order_date: date, lines: list[dict[str, Any]], channel: str | None = None
+    ) -> Any:
         if not lines:
             raise SalesConflictError("sales order must contain a line")
+        if channel not in {"WHOLESALE", "RETAIL"}:
+            raise SalesConflictError("a supported sales channel is required")
         order = SalesOrder(
             id=uuid4(),
             customer_id=customer_id,
             order_date=order_date,
+            channel=channel,
             status="DRAFT",
             currency_code="PYG",
             total=Decimal("0"),
@@ -94,6 +117,7 @@ class SalesService:
         )
         if not lines:
             raise SalesConflictError("delivery must contain a line")
+        await self._ensure_egg_products_are_saleable(session, {line.product_id for line in lines})
         order_lines = {
             line.id: line
             for line in (
@@ -160,6 +184,11 @@ class SalesService:
         sequence.current_number += 1
         number = str(sequence.current_number).zfill(sequence.padding)
         lines = [dict(item) for item in payload["lines"]]
+        if payload["document_type"] != "CREDIT_NOTE":
+            if payload.get("channel") not in {"WHOLESALE", "RETAIL"}:
+                raise SalesConflictError("a supported sales channel is required")
+            product_ids = {line["product_id"] for line in lines if line.get("product_id") is not None}
+            await self._ensure_egg_products_are_saleable(session, product_ids)
         totals = calculate_document_totals(lines)
         original = None
         if payload["document_type"] == "CREDIT_NOTE":
@@ -188,6 +217,7 @@ class SalesService:
             customer_name_snapshot=customer.name,
             customer_document_snapshot=f"{customer.document_type}:{customer.document_number}",
             document_date=payload["document_date"],
+            channel=original.channel if original is not None else payload["channel"],
             original_document_id=payload.get("original_document_id"),
             **{
                 key: totals[key]

@@ -198,7 +198,7 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
     assert 'assert not services["db"].get("ports")' in run_script
     assert 'assert not services["backend"].get("ports")' in run_script
     assert "/health/ready" in run_script
-    assert "0010_costing" in run_script
+    assert "0013_sales_channel" in run_script
     assert "bootstrap-admin" in run_script
     assert "/api/v1/auth/change-password" in run_script
     assert "/api/v1/auth/login" in run_script
@@ -311,8 +311,14 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
     assert "golang.org/x/text@v0.39.0" in dockerfile
     assert "google.golang.org/grpc@v1.83.2" in dockerfile
     assert "apt-get install --no-install-recommends --yes python3" in dockerfile
-    assert "USER nobody" not in dockerfile
-    assert "go test ./... -skip 'TestMount|TestArchiverErrorReporting/file-unreadable'" in dockerfile
+    assert "groupadd --system --gid 10003 restic-test" in dockerfile
+    assert "useradd --system --uid 10003 --gid restic-test" in dockerfile
+    assert "chown -R 10003:10003 /src/restic /tmp/go-build-cache" in dockerfile
+    assert "USER 10003:10003" in dockerfile
+    assert "go test ./... -skip 'TestMount'" in dockerfile
+    assert "USER root" in dockerfile
+    assert "CGO_ENABLED=0 go build" in dockerfile
+    assert "USER 10002:10002" in dockerfile
     assert "does not expose /dev/fuse" in dockerfile
     assert "COPY --from=restic-builder" in dockerfile
     assert "COPY --from=restic/restic:" not in dockerfile

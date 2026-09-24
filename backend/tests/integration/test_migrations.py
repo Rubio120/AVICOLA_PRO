@@ -67,6 +67,10 @@ EXPECTED_TABLES = {
     "inventory_movements",
     "inventory_balances",
     "inventory_cost_variances",
+    "egg_categories",
+    "egg_presentation_conversions",
+    "egg_production_classifications",
+    "egg_production_allocations",
     "flocks",
     "flock_house_assignments",
     "flock_balances",
@@ -75,6 +79,7 @@ EXPECTED_TABLES = {
     "bird_adjustment_events",
     "flock_daily_records",
     "feed_consumption",
+    "egg_production_events",
     "purchase_orders",
     "purchase_order_lines",
     "purchase_receipts",
@@ -155,6 +160,81 @@ def test_inventory_schema_has_reconciliation_indexes_and_append_only_trigger() -
             "select tgname from pg_trigger where tgrelid = 'inventory_movements'::regclass and not tgisinternal"
         )
         assert "trg_inventory_movements_append_only" in {row[0] for row in cursor.fetchall()}
+
+
+@pytest.mark.integration
+def test_egg_production_migration_upgrades_from_delivery_12_and_is_append_only() -> None:
+    _run_alembic("downgrade", "0010_costing")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select indexname from pg_indexes where schemaname = 'public' and tablename = 'egg_production_events'"
+        )
+        indexes = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid = 'egg_production_events'::regclass and not tgisinternal"
+        )
+        triggers = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select column_name, is_nullable from information_schema.columns "
+            "where table_schema = 'public' and table_name = 'egg_production_events'"
+        )
+        columns: dict[str, str] = dict(cursor.fetchall())
+
+    assert "ix_egg_production_flock_date" in indexes
+    assert "trg_egg_production_events_append_only" in triggers
+    assert columns["idempotency_key"] == "NO"
+    assert columns["actor_user_id"] == "NO"
+
+
+@pytest.mark.integration
+def test_egg_inventory_migration_is_immutable_and_adds_only_permissions() -> None:
+    _run_alembic("downgrade", "0011_egg_production")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid in "
+            "('egg_presentation_conversions'::regclass, 'egg_production_classifications'::regclass, "
+            "'egg_production_allocations'::regclass) and not tgisinternal"
+        )
+        triggers = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select key from permissions where key like 'inventory.egg_%' or key = 'production.eggs.classify'"
+        )
+        permission_keys = {row[0] for row in cursor.fetchall()}
+        cursor.execute("select count(*) from egg_categories")
+        category_result = cursor.fetchone()
+        assert category_result is not None
+        category_count = category_result[0]
+
+    assert {
+        "trg_egg_presentation_conversions_append_only",
+        "trg_egg_production_classifications_append_only",
+        "trg_egg_production_allocations_append_only",
+    } <= triggers
+    assert permission_keys == {"inventory.egg_categories.manage", "production.eggs.classify"}
+    assert category_count == 0
+
+
+@pytest.mark.integration
+def test_sales_channel_migration_preserves_history_as_unclassified() -> None:
+    _run_alembic("downgrade", "0012_egg_inventory")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select table_name, column_name, is_nullable from information_schema.columns "
+            "where table_schema = 'public' and column_name = 'channel'"
+        )
+        channel_columns = {(table, column): nullable for table, column, nullable in cursor.fetchall()}
+        cursor.execute("select conname from pg_constraint where conname like '%channel_valid'")
+        constraints = {row[0] for row in cursor.fetchall()}
+
+    assert channel_columns == {
+        ("sales_orders", "channel"): "YES",
+        ("commercial_documents", "channel"): "YES",
+    }
+    assert any(name.endswith("sales_order_channel_valid") for name in constraints)
+    assert any(name.endswith("commercial_document_channel_valid") for name in constraints)
 
 
 @pytest.mark.integration

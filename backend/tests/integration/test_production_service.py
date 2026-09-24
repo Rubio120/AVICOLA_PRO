@@ -12,10 +12,22 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from avicola_pro.modules.catalog.infrastructure.models import Farm, House
+from avicola_pro.modules.catalog.infrastructure.models import Farm, House, Product, Warehouse
 from avicola_pro.modules.identity.infrastructure.models import User
+from avicola_pro.modules.inventory.infrastructure.models import (
+    EggCategory,
+    EggProductionAllocation,
+    EggProductionClassification,
+    InventoryBalance,
+)
 from avicola_pro.modules.production.application.service import ProductionConflictError, production_service
-from avicola_pro.modules.production.infrastructure.models import BirdMovementEvent, Flock, FlockBalance
+from avicola_pro.modules.production.infrastructure.models import (
+    BirdMovementEvent,
+    EggProductionEvent,
+    Flock,
+    FlockBalance,
+)
+from avicola_pro.modules.settings.infrastructure.models import UnitOfMeasure
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -98,4 +110,177 @@ async def test_activation_mortality_and_close_preserve_flock_invariants() -> Non
         )
         closed = await production_service.close(session, flock_id, True)
         assert closed.status == "CLOSED"
+    await engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_egg_production_requires_assignment_and_idempotently_records_confirmed_facts() -> None:
+    engine = create_async_engine(_database_url())
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    actor = uuid4()
+    flock_id = uuid4()
+    farm_id = uuid4()
+    house_id = uuid4()
+    record_date = date(2026, 9, 19)
+    async with factory() as session, session.begin():
+        session.add(
+            User(
+                id=actor,
+                username="egg-production",
+                email="egg-production@example.test",
+                display_name="Egg Production",
+                password_hash="argon2id",  # noqa: S106 - synthetic fixture value
+            )
+        )
+        session.add(Farm(id=farm_id, code="FARM-E", name="Egg farm"))
+        session.add(House(id=house_id, farm_id=farm_id, code="H-E", name="Egg house", capacity=100))
+        session.add(
+            Flock(
+                id=flock_id,
+                code="FLOCK-EGG-001",
+                purpose="Layers",
+                entry_date=record_date,
+                planned_initial_quantity=Decimal("50"),
+            )
+        )
+        await session.flush()
+        await production_service.activate(session, flock_id, actor)
+        await production_service.assign_house(session, flock_id, house_id, record_date, Decimal("50"))
+        first, created = await production_service.record_egg_production(
+            session, flock_id, house_id, record_date, 120, "egg-run-1", actor
+        )
+        repeated, repeated_created = await production_service.record_egg_production(
+            session, flock_id, house_id, record_date, 120, "egg-run-1", actor
+        )
+        assert created and not repeated_created
+        assert first.id == repeated.id
+        with pytest.raises(ProductionConflictError, match="different egg record"):
+            await production_service.record_egg_production(
+                session, flock_id, house_id, record_date, 121, "egg-run-1", actor
+            )
+        listed = await production_service.list_egg_production(session, record_date, record_date, flock_id, house_id)
+        assert len(listed) == 1
+        assert listed[0].egg_count == 120
+        assert listed[0].status == "CONFIRMED"
+        assert await session.scalar(select(EggProductionEvent.id).where(EggProductionEvent.id == first.id)) is not None
+    await engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_egg_production_classification_posts_atomic_stock_and_is_idempotent() -> None:
+    engine = create_async_engine(_database_url())
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    actor, flock_id, farm_id, house_id = uuid4(), uuid4(), uuid4(), uuid4()
+    warehouse_id, product_id, category_id = uuid4(), uuid4(), uuid4()
+    record_date = date(2026, 9, 19)
+    async with factory() as session, session.begin():
+        session.add(
+            User(
+                id=actor,
+                username="egg-classifier",
+                email="egg-classifier@example.test",
+                display_name="Egg Classifier",
+                password_hash="argon2id",  # noqa: S106 - synthetic fixture value
+            )
+        )
+        session.add(Farm(id=farm_id, code="FARM-CLASS", name="Classification farm"))
+        session.add(House(id=house_id, farm_id=farm_id, code="H-CLASS", name="Classification house", capacity=100))
+        session.add(Warehouse(id=warehouse_id, code="WH-CLASS", name="Classification warehouse", is_active=True))
+        session.add(UnitOfMeasure(code="egg_unit", name="Synthetic individual egg", precision=0))
+        session.add(
+            Product(
+                id=product_id,
+                sku="EGG-SYNTHETIC",
+                name="Synthetic egg inventory item",
+                product_type="PRODUCT",
+                base_unit_code="egg_unit",
+                is_active=True,
+            )
+        )
+        session.add(
+            EggCategory(
+                id=category_id,
+                code="SYNTHETIC-CAT",
+                name="Synthetic test category",
+                product_id=product_id,
+                is_saleable=True,
+            )
+        )
+        session.add(
+            Flock(
+                id=flock_id,
+                code="FLOCK-CLASS",
+                purpose="Layers",
+                entry_date=record_date,
+                planned_initial_quantity=Decimal("50"),
+            )
+        )
+        await session.flush()
+        await production_service.activate(session, flock_id, actor)
+        await production_service.assign_house(session, flock_id, house_id, record_date, Decimal("50"))
+        event, _ = await production_service.record_egg_production(
+            session, flock_id, house_id, record_date, 120, "egg-classification-source", actor
+        )
+        with pytest.raises(ProductionConflictError, match="must equal"):
+            await production_service.classify_egg_production(
+                session, event.id, warehouse_id, [(category_id, 119)], "egg-classification-invalid", actor
+            )
+        assert await session.scalar(select(EggProductionClassification.id)) is None
+        classification, created = await production_service.classify_egg_production(
+            session, event.id, warehouse_id, [(category_id, 120)], "egg-classification-valid", actor
+        )
+        repeated, repeated_created = await production_service.classify_egg_production(
+            session, event.id, warehouse_id, [(category_id, 120)], "egg-classification-valid", actor
+        )
+        assert created and not repeated_created
+        assert classification.id == repeated.id
+        assert await session.scalar(select(EggProductionAllocation.egg_count)) == 120
+        balance = await session.scalar(select(InventoryBalance).where(InventoryBalance.warehouse_id == warehouse_id))
+        assert balance is not None and balance.quantity == Decimal("120.0000")
+        assert classification.inventory_document_id is not None
+    await engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_zero_egg_production_classifies_without_creating_stock_document() -> None:
+    engine = create_async_engine(_database_url())
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    actor, flock_id, farm_id, house_id, warehouse_id = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    record_date = date(2026, 9, 19)
+    async with factory() as session, session.begin():
+        session.add(
+            User(
+                id=actor,
+                username="zero-egg-classifier",
+                email="zero-egg-classifier@example.test",
+                display_name="Zero Egg Classifier",
+                password_hash="argon2id",  # noqa: S106 - synthetic fixture value
+            )
+        )
+        session.add(Farm(id=farm_id, code="FARM-ZERO", name="Zero farm"))
+        session.add(House(id=house_id, farm_id=farm_id, code="H-ZERO", name="Zero house", capacity=100))
+        session.add(Warehouse(id=warehouse_id, code="WH-ZERO", name="Zero warehouse", is_active=True))
+        session.add(
+            Flock(
+                id=flock_id,
+                code="FLOCK-ZERO",
+                purpose="Layers",
+                entry_date=record_date,
+                planned_initial_quantity=Decimal("50"),
+            )
+        )
+        await session.flush()
+        await production_service.activate(session, flock_id, actor)
+        await production_service.assign_house(session, flock_id, house_id, record_date, Decimal("50"))
+        event, _ = await production_service.record_egg_production(
+            session, flock_id, house_id, record_date, 0, "egg-zero-source", actor
+        )
+        classification, created = await production_service.classify_egg_production(
+            session, event.id, warehouse_id, [], "egg-zero-classification", actor
+        )
+        assert created and classification.inventory_document_id is None
+        assert await session.scalar(select(InventoryBalance.id)) is None
     await engine.dispose()

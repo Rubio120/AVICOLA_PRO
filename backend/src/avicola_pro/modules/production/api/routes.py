@@ -6,7 +6,7 @@ from importlib import import_module
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Cookie, Depends, Header, Request
+from fastapi import APIRouter, Cookie, Depends, Header, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
@@ -29,6 +29,7 @@ request_context = _auth.request_context
 _models = import_module("avicola_pro.modules.production.infrastructure.models")
 Flock: Any = _models.Flock
 FlockBalance: Any = _models.FlockBalance
+EggProductionEvent: Any = _models.EggProductionEvent
 
 
 class StrictModel(BaseModel):
@@ -80,6 +81,25 @@ class FeedPayload(StrictModel):
     occurred_on: date
 
 
+class EggRecordPayload(StrictModel):
+    flock_id: UUID
+    house_id: UUID
+    occurred_on: date
+    egg_count: int = Field(ge=0, le=999_999_999_999_999_999, strict=True)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+class EggAllocationPayload(StrictModel):
+    category_id: UUID
+    egg_count: int = Field(ge=0, le=999_999_999_999_999_999, strict=True)
+
+
+class EggClassificationPayload(StrictModel):
+    warehouse_id: UUID
+    allocations: list[EggAllocationPayload] = Field(max_length=200)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
 class FlockResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -94,6 +114,31 @@ class BalanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     flock_id: UUID
     live_birds: Decimal
+
+
+class EggProductionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    flock_id: UUID
+    house_id: UUID
+    occurred_on: date
+    egg_count: int
+    status: str
+
+
+class EggProductionOptionResponse(BaseModel):
+    flock_id: UUID
+    flock_code: str
+    house_id: UUID
+    house_code: str
+
+
+class EggClassificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    production_event_id: UUID
+    warehouse_id: UUID
+    inventory_document_id: UUID | None
 
 
 def build_production_router(
@@ -283,6 +328,99 @@ def build_production_router(
                 raise ForbiddenError(code="invalid_production_operation", detail=str(exc)) from None
             add_audit(session, user, request, "production.feed.create", str(item.id))
             return {"id": str(item.id)}
+
+    @router.post("/egg-records", response_model=EggProductionResponse, status_code=201)
+    async def record_eggs(
+        payload: EggRecordPayload,
+        request: Request,
+        user: Any = Depends(require("production.eggs.record")),  # noqa: B008
+        _: Any = Depends(csrf_user),  # noqa: B008
+    ) -> EggProductionResponse:  # noqa: B008
+        async with database.session_factory() as session, session.begin():
+            try:
+                event, created = await production_service.record_egg_production(
+                    session, actor_user_id=user.id, **payload.model_dump()
+                )
+            except ProductionConflictError as exc:
+                raise ForbiddenError(code="invalid_production_operation", detail=str(exc)) from None
+            if created:
+                add_audit(session, user, request, "production.eggs.record", str(event.id))
+            return EggProductionResponse.model_validate(event)
+
+    @router.get("/egg-records", response_model=list[EggProductionResponse])
+    async def egg_records(
+        date_from: date,
+        date_to: date,
+        flock_id: UUID | None = None,
+        house_id: UUID | None = None,
+        limit: int = Query(default=100, ge=1, le=500),  # noqa: B008
+        offset: int = Query(default=0, ge=0),  # noqa: B008
+        _: Any = Depends(require("production.eggs.read")),  # noqa: B008
+    ) -> list[EggProductionResponse]:  # noqa: B008
+        if date_to < date_from:
+            raise ForbiddenError(code="invalid_date_range", detail="date_to must be on or after date_from")
+        async with database.session_factory() as session:
+            events = await production_service.list_egg_production(
+                session, date_from, date_to, flock_id, house_id, limit, offset
+            )
+            return [EggProductionResponse.model_validate(event) for event in events]
+
+    @router.get("/egg-records/unclassified", response_model=list[EggProductionResponse])
+    async def unclassified_egg_records(
+        date_from: date,
+        date_to: date,
+        flock_id: UUID | None = None,
+        house_id: UUID | None = None,
+        limit: int = Query(default=100, ge=1, le=500),  # noqa: B008
+        offset: int = Query(default=0, ge=0),  # noqa: B008
+        _: Any = Depends(require("production.eggs.read")),  # noqa: B008
+    ) -> list[EggProductionResponse]:  # noqa: B008
+        if date_to < date_from:
+            raise ForbiddenError(code="invalid_date_range", detail="date_to must be on or after date_from")
+        async with database.session_factory() as session:
+            events = await production_service.list_unclassified_egg_production(
+                session, date_from, date_to, flock_id, house_id, limit, offset
+            )
+            return [EggProductionResponse.model_validate(event) for event in events]
+
+    @router.post(
+        "/egg-records/{production_event_id}/classifications",
+        response_model=EggClassificationResponse,
+        status_code=201,
+    )
+    async def classify_egg_record(
+        production_event_id: UUID,
+        payload: EggClassificationPayload,
+        request: Request,
+        user: Any = Depends(require("production.eggs.classify")),  # noqa: B008
+        _: Any = Depends(csrf_user),  # noqa: B008
+    ) -> EggClassificationResponse:  # noqa: B008
+        async with database.session_factory() as session, session.begin():
+            try:
+                classification, created = await production_service.classify_egg_production(
+                    session,
+                    production_event_id,
+                    payload.warehouse_id,
+                    [(item.category_id, item.egg_count) for item in payload.allocations],
+                    payload.idempotency_key,
+                    user.id,
+                )
+            except ProductionNotFoundError as exc:
+                raise ForbiddenError(code="not_found", detail=str(exc)) from None
+            except ProductionConflictError as exc:
+                raise ForbiddenError(code="invalid_egg_classification", detail=str(exc)) from None
+            if created:
+                add_audit(session, user, request, "production.eggs.classify", str(classification.id))
+            return EggClassificationResponse.model_validate(classification)
+
+    @router.get("/egg-record-options", response_model=list[EggProductionOptionResponse])
+    async def egg_record_options(
+        on_date: date,
+        _: Any = Depends(require("production.eggs.read")),  # noqa: B008
+    ) -> list[EggProductionOptionResponse]:  # noqa: B008
+        async with database.session_factory() as session:
+            options = await production_service.list_egg_production_options(session, on_date)
+            return [EggProductionOptionResponse.model_validate(item) for item in options]
 
     @router.post("/flocks/{flock_id}/close", response_model=FlockResponse)
     async def close(

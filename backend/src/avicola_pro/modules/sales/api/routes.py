@@ -8,11 +8,11 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Cookie, Depends, Header, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
 from avicola_pro.modules.sales.application.service import SalesNotFoundError, sales_service
-from avicola_pro.modules.sales.domain.rules import SalesConflictError
+from avicola_pro.modules.sales.domain.rules import SalesChannel, SalesConflictError
 from avicola_pro.shared.api.errors import ForbiddenError, UnauthorizedError
 from avicola_pro.shared.infrastructure.database import DatabaseResources
 
@@ -49,6 +49,7 @@ class OrderLine(StrictModel):
 class OrderPayload(StrictModel):
     customer_id: UUID
     order_date: date
+    channel: SalesChannel
     lines: list[OrderLine] = Field(min_length=1, max_length=500)
 
 
@@ -82,8 +83,15 @@ class DocumentPayload(StrictModel):
     document_type: str = Field(pattern=r"^(INVOICE|CREDIT_NOTE)$")
     series: str = Field(min_length=1, max_length=16)
     document_date: date
+    channel: SalesChannel | None = None
     original_document_id: UUID | None = None
     lines: list[DocumentLine] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def require_channel_for_invoice(self) -> DocumentPayload:
+        if self.document_type == "INVOICE" and self.channel is None:
+            raise ValueError("a supported sales channel is required for invoices")
+        return self
 
 
 class PaymentAllocation(StrictModel):
@@ -105,6 +113,7 @@ class OrderResponse(BaseModel):
     id: UUID
     customer_id: UUID
     order_date: date
+    channel: str | None
     status: str
     total: Decimal
 
@@ -124,6 +133,7 @@ class DocumentResponse(BaseModel):
     series: str
     number: str
     customer_id: UUID
+    channel: str | None
     total: Decimal
     status: str
 
@@ -210,7 +220,11 @@ def build_sales_router(
         async with database.session_factory() as session, session.begin():
             try:
                 order = await sales_service.create_order(
-                    session, payload.customer_id, payload.order_date, [line.model_dump() for line in payload.lines]
+                    session,
+                    payload.customer_id,
+                    payload.order_date,
+                    [line.model_dump() for line in payload.lines],
+                    payload.channel.value,
                 )
             except SalesConflictError as exc:
                 raise conflict(exc) from None

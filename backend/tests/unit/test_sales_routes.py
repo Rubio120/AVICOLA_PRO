@@ -9,13 +9,46 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.requests import Request
 
-from avicola_pro.modules.sales.api.routes import OrderPayload, build_sales_router
+from avicola_pro.modules.sales.api.routes import DocumentPayload, OrderPayload, build_sales_router
 from avicola_pro.shared.infrastructure.database import DatabaseResources
 
 
 def test_sales_order_payload_rejects_unknown_server_fields() -> None:
     with pytest.raises(ValidationError):
         OrderPayload(customer_id=uuid4(), order_date=date.today(), lines=[], approved=True)  # type: ignore[call-arg]
+
+
+def test_sales_order_payload_requires_a_supported_channel() -> None:
+    from pydantic import ValidationError
+
+    from avicola_pro.modules.sales.api.routes import OrderPayload
+
+    common = {
+        "customer_id": uuid4(),
+        "order_date": date.today(),
+        "lines": [{"product_id": uuid4(), "quantity": "1", "unit_price": "2"}],
+    }
+    with pytest.raises(ValidationError):
+        OrderPayload(**common)
+    with pytest.raises(ValidationError):
+        OrderPayload(**common, channel="DIRECT")
+    assert OrderPayload(**common, channel="WHOLESALE").channel == "WHOLESALE"
+    assert OrderPayload(**common, channel="RETAIL").channel == "RETAIL"
+
+
+def test_invoice_channel_is_required_and_credit_note_channel_can_be_inherited() -> None:
+    common = {
+        "customer_id": uuid4(),
+        "series": "A",
+        "document_date": date.today(),
+        "lines": [{"description": "Producto", "quantity": "1", "unit_price": "2", "tax_rate": "0"}],
+    }
+    with pytest.raises(ValidationError):
+        DocumentPayload(**common, document_type="INVOICE")
+    invoice = DocumentPayload(**common, document_type="INVOICE", channel="RETAIL")
+    credit_note = DocumentPayload(**common, document_type="CREDIT_NOTE", original_document_id=uuid4())
+    assert invoice.channel == "RETAIL"
+    assert credit_note.channel is None
 
 
 @pytest.mark.asyncio
@@ -58,6 +91,7 @@ async def test_create_sales_order_endpoint_persists_and_audits() -> None:
     payload = OrderPayload(
         customer_id=uuid4(),
         order_date=date.today(),
+        channel="WHOLESALE",
         lines=[{"product_id": uuid4(), "quantity": Decimal("2"), "unit_price": Decimal("10")}],
     )
     result = await route.endpoint(payload, request, SimpleNamespace(id=uuid4(), username="seller"), object())

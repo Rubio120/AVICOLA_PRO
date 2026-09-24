@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -102,3 +102,23 @@ class FeedConsumption(Base):
         ForeignKey("inventory_movements.id", ondelete="RESTRICT")
     )
     occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+
+
+class EggProductionEvent(Base):
+    __tablename__ = "egg_production_events"
+    __table_args__ = (
+        CheckConstraint("egg_count >= 0", name="egg_count_nonnegative"),
+        CheckConstraint("status = 'CONFIRMED'", name="egg_production_status_valid"),
+    )
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    flock_id: Mapped[UUID] = mapped_column(ForeignKey("flocks.id", ondelete="RESTRICT"), nullable=False)
+    house_id: Mapped[UUID] = mapped_column(ForeignKey("houses.id", ondelete="RESTRICT"), nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    egg_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    actor_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    reversal_of_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("egg_production_events.id", ondelete="RESTRICT"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'CONFIRMED'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

@@ -6,6 +6,7 @@ from importlib import import_module
 from typing import Any
 from uuid import UUID, uuid4
 
+from avicola_pro.modules.inventory.domain.egg_units import to_base_egg_units
 from avicola_pro.modules.inventory.domain.rules import calculate_inbound, calculate_outbound
 
 _sqlalchemy = import_module("sqlalchemy")
@@ -19,6 +20,7 @@ InventoryDocument: Any = _models.InventoryDocument
 InventoryDocumentLine: Any = _models.InventoryDocumentLine
 InventoryMovement: Any = _models.InventoryMovement
 InventoryCostVariance: Any = _models.InventoryCostVariance
+EggCategory: Any = _models.EggCategory
 
 
 class InventoryNotFoundError(LookupError):
@@ -58,6 +60,12 @@ class InventoryService:
         if document.document_type == "TRANSFER" and document.destination_warehouse_id is None:
             raise InventoryConflictError("Transfer destination is required")
         for line in lines:
+            egg_category = await session.scalar(select(EggCategory).where(EggCategory.product_id == line.product_id))
+            if egg_category is not None:
+                try:
+                    to_base_egg_units(line.quantity, 1)
+                except ValueError as exc:
+                    raise InventoryConflictError("Egg inventory quantity must be a whole number of eggs") from exc
             if document.document_type == "TRANSFER":
                 if document.warehouse_id is None:
                     raise InventoryConflictError("Transfer source is required")

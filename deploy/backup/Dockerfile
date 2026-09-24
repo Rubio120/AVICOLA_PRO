@@ -18,9 +18,15 @@ RUN go mod edit \
     -require=google.golang.org/grpc@v1.83.2 \
     && go mod tidy
 ENV GOCACHE=/tmp/go-build-cache
-# Run the upstream test suite with normal filesystem privileges and its Python test helper.
+# Run permission-sensitive upstream tests as a non-root user; the OCI builder has no FUSE device.
 # The OCI build sandbox does not expose /dev/fuse; Restic's runtime does not use FUSE.
-RUN go test ./... -skip 'TestMount|TestArchiverErrorReporting/file-unreadable'
+RUN groupadd --system --gid 10003 restic-test \
+    && useradd --system --uid 10003 --gid restic-test --home-dir /tmp --shell /usr/sbin/nologin restic-test \
+    && install -d --owner=10003 --group=10003 /tmp/go-build-cache \
+    && chown -R 10003:10003 /src/restic /tmp/go-build-cache
+USER 10003:10003
+RUN go test ./... -skip 'TestMount'
+USER root
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/restic ./cmd/restic
 
 FROM postgres:16.15-trixie

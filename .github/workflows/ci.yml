@@ -221,7 +221,7 @@ jobs:
           printf '%s' "$rendered" | python -c 'import json,sys; services=json.load(sys.stdin)["services"]; assert not services["db"].get("ports"), "database must remain private"; assert not services["backend"].get("ports"), "backend must remain private"; print("Database and backend have no host-published ports")'
           "${compose[@]}" up --detach --wait --wait-timeout 180 db backend frontend
           migration="$("${compose[@]}" exec -T backend alembic current)"
-          grep -F '0010_costing' <<< "$migration"
+          grep -F '0013_sales_channel' <<< "$migration"
           temporary_password="$("${compose[@]}" exec -T backend avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'CI Synthetic Administrator' | sed -n '/temporal:/s/^[^:]*: //p')"
           test -n "$temporary_password"
           "${compose[@]}" exec -T backend python - "$temporary_password" <<'PY'
@@ -266,7 +266,7 @@ jobs:
               raise AssertionError("session remained valid after logout")
           print("Readiness, migration, synthetic bootstrap, password change, login, session and logout verified")
           PY
-          printf 'commit=%s\ncompose_smoke=passed migration=0010_costing\n' "$GITHUB_SHA" > artifacts-security/compose-smoke-summary.txt
+          printf 'commit=%s\ncompose_smoke=passed migration=0013_sales_channel\n' "$GITHUB_SHA" > artifacts-security/compose-smoke-summary.txt
       - name: Clean isolated Compose application
         if: always()
         shell: bash

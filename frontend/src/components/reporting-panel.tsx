@@ -13,8 +13,17 @@ type Dashboard = {
   confirmed_costs: string;
 };
 
+type CommercialRow = {
+  channel: string;
+  invoices: number;
+  credit_notes: number;
+  customers_with_documents: number;
+  net_revenue: string;
+};
+
 export function ReportingPanel() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [commercial, setCommercial] = useState<CommercialRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -28,6 +37,19 @@ export function ReportingPanel() {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setState("error");
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/v1/reports/commercial", { credentials: "include", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("commercial reports unavailable");
+        setCommercial((await response.json()) as CommercialRow[]);
+      })
+      .catch(() => {
+        if (!(controller.signal.aborted)) setCommercial([]);
       });
     return () => controller.abort();
   }, []);
@@ -50,6 +72,25 @@ export function ReportingPanel() {
           <div><dt>Caja PYG</dt><dd>{dashboard.cash_balance}</dd></div>
           <div><dt>Costos confirmados</dt><dd>{dashboard.confirmed_costs}</dd></div>
         </dl>
+      ) : null}
+      {state === "ready" ? (
+        <>
+          <h3>Ventas por canal</h3>
+          {commercial.length === 0 ? <p>Sin comprobantes emitidos por canal.</p> : null}
+          {commercial.length > 0 ? (
+            <ul>
+              {commercial.map((row) => (
+                <li key={row.channel}>
+                  {row.channel === "WHOLESALE" ? "Mayorista" : row.channel === "RETAIL" ? "Minorista" : "Histórico sin clasificar"}: {row.net_revenue} PYG netos ({row.invoices} facturas, {row.credit_notes} notas de crédito)
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p>Clientes nuevos y ticket promedio: pendientes de definición de negocio.</p>
+          <a href="/api/v1/reports/profitability.xlsx" download="profitability.xlsx">
+            Exportar reporte XLSX
+          </a>
+        </>
       ) : null}
     </section>
   );

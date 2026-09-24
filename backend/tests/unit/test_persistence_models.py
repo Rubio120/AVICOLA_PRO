@@ -44,6 +44,10 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "inventory_movements",
         "inventory_balances",
         "inventory_cost_variances",
+        "egg_categories",
+        "egg_presentation_conversions",
+        "egg_production_classifications",
+        "egg_production_allocations",
         "flocks",
         "flock_house_assignments",
         "flock_balances",
@@ -52,6 +56,7 @@ def test_identity_and_audit_models_share_central_metadata() -> None:
         "bird_adjustment_events",
         "flock_daily_records",
         "feed_consumption",
+        "egg_production_events",
         "purchase_orders",
         "purchase_order_lines",
         "purchase_receipts",
@@ -101,3 +106,46 @@ def test_persistence_models_use_postgresql_uuid_timestamptz_and_jsonb() -> None:
     assert isinstance(tables["audit_events"].c.before_data.type, JSONB)
     assert isinstance(tables["audit_events"].c.after_data.type, JSONB)
     assert isinstance(tables["security_events"].c.metadata.type, JSONB)
+
+
+def test_egg_inventory_models_require_explicit_configuration_and_classification() -> None:
+    persistence = importlib.import_module("avicola_pro.shared.infrastructure.models")
+    persistence.load_persistence_models()
+    tables = persistence.metadata.tables
+
+    categories = tables["egg_categories"]
+    assert categories.c.product_id.nullable is False
+    assert categories.c.is_saleable.nullable is False
+    assert categories.c.is_saleable.server_default is None
+    assert any(
+        {"product_id"} == {column.name for column in constraint.columns} for constraint in categories.constraints
+    )
+
+    conversions = tables["egg_presentation_conversions"]
+    assert {"category_id", "unit_code", "version"} <= set(conversions.c.keys())
+    assert any(constraint.name.endswith("egg_conversion_factor_positive") for constraint in conversions.constraints)
+    assert any(constraint.name.endswith("egg_conversion_version_positive") for constraint in conversions.constraints)
+
+    classifications = tables["egg_production_classifications"]
+    assert classifications.c.warehouse_id.nullable is False
+    assert classifications.c.production_event_id.unique is True
+    assert classifications.c.inventory_document_id.nullable is True
+
+    allocations = tables["egg_production_allocations"]
+    assert any(constraint.name.endswith("egg_allocation_count_nonnegative") for constraint in allocations.constraints)
+
+
+def test_sales_channels_allow_unclassified_history_but_constrain_new_values() -> None:
+    persistence = importlib.import_module("avicola_pro.shared.infrastructure.models")
+    persistence.load_persistence_models()
+    tables = persistence.metadata.tables
+
+    for table_name in ("sales_orders", "commercial_documents"):
+        channel = tables[table_name].c.channel
+        assert channel.nullable is True
+        checks = [
+            constraint.sqltext.text
+            for constraint in tables[table_name].constraints
+            if constraint.__class__.__name__ == "CheckConstraint"
+        ]
+        assert any("WHOLESALE" in check and "RETAIL" in check for check in checks)

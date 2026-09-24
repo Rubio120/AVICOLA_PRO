@@ -43,6 +43,10 @@ BASE_PERMISSION_KEYS = (
     "purchases.documents.create",
     "purchases.payments.create",
     "purchases.payments.reverse",
+    "production.eggs.read",
+    "production.eggs.record",
+    "inventory.egg_categories.manage",
+    "production.eggs.classify",
 )
 
 BASE_ROLE_CODES = (

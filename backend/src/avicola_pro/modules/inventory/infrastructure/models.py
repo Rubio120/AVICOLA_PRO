@@ -4,7 +4,19 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -132,3 +144,62 @@ class InventoryCostVariance(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class EggCategory(Base):
+    __tablename__ = "egg_categories"
+    __table_args__ = (CheckConstraint("code <> '' and name <> ''", name="egg_category_text_nonempty"),)
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    product_id: Mapped[UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    is_saleable: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class EggPresentationConversion(Base):
+    __tablename__ = "egg_presentation_conversions"
+    __table_args__ = (
+        CheckConstraint("units_per_package > 0", name="egg_conversion_factor_positive"),
+        CheckConstraint("version > 0", name="egg_conversion_version_positive"),
+        UniqueConstraint("category_id", "unit_code", "version", name="egg_conversion_version_unique"),
+    )
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    category_id: Mapped[UUID] = mapped_column(ForeignKey("egg_categories.id", ondelete="RESTRICT"), nullable=False)
+    unit_code: Mapped[str] = mapped_column(ForeignKey("units_of_measure.code", ondelete="RESTRICT"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    units_per_package: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class EggProductionClassification(Base):
+    __tablename__ = "egg_production_classifications"
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    production_event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("egg_production_events.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    warehouse_id: Mapped[UUID] = mapped_column(ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False)
+    inventory_document_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("inventory_documents.id", ondelete="RESTRICT"), nullable=True, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    actor_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class EggProductionAllocation(Base):
+    __tablename__ = "egg_production_allocations"
+    __table_args__ = (
+        CheckConstraint("egg_count >= 0", name="egg_allocation_count_nonnegative"),
+        UniqueConstraint("classification_id", "category_id", name="egg_allocation_category_unique"),
+    )
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    classification_id: Mapped[UUID] = mapped_column(
+        ForeignKey("egg_production_classifications.id", ondelete="RESTRICT"), nullable=False
+    )
+    category_id: Mapped[UUID] = mapped_column(ForeignKey("egg_categories.id", ondelete="RESTRICT"), nullable=False)
+    egg_count: Mapped[int] = mapped_column(BigInteger, nullable=False)

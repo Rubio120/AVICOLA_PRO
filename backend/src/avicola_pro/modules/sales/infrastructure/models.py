@@ -29,10 +29,12 @@ class SalesOrder(Base):
             "status in ('DRAFT','CONFIRMED','PARTIALLY_FULFILLED','FULFILLED','CANCELLED')",
             name="sales_order_status_valid",
         ),
+        CheckConstraint("channel is null or channel in ('WHOLESALE','RETAIL')", name="sales_order_channel_valid"),
     )
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     customer_id: Mapped[UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
+    channel: Mapped[str | None] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False, server_default=text("'PYG'"))
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
@@ -93,6 +95,9 @@ class CommercialDocument(Base):
     __table_args__ = (
         UniqueConstraint("document_type", "series", "number", name="uq_commercial_document_number"),
         CheckConstraint("total >= 0", name="commercial_document_total_nonnegative"),
+        CheckConstraint(
+            "channel is null or channel in ('WHOLESALE','RETAIL')", name="commercial_document_channel_valid"
+        ),
         Index("ix_commercial_documents_customer_status", "customer_id", "status"),
     )
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
@@ -103,6 +108,7 @@ class CommercialDocument(Base):
     customer_name_snapshot: Mapped[str] = mapped_column(String(200), nullable=False)
     customer_document_snapshot: Mapped[str] = mapped_column(String(64), nullable=False)
     document_date: Mapped[date] = mapped_column(Date, nullable=False)
+    channel: Mapped[str | None] = mapped_column(String(16))
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False, server_default=text("'PYG'"))
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'ISSUED'"))
     exempt_subtotal: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))

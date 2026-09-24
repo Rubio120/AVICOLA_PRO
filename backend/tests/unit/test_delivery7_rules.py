@@ -137,6 +137,8 @@ async def test_confirm_delivery_updates_order_and_creates_inventory_document() -
 
         async def scalars(self, _query: object) -> Result:
             self.scalars_calls += 1
+            if self.scalars_calls == 2:
+                return Result([])
             return Result([delivery_line] if self.scalars_calls == 1 else [order_line])
 
         def add(self, _: object) -> None:
