@@ -345,7 +345,7 @@ jobs:
           grep -F 'Restore reconciliation passed (9 checks)' <<< "$restore_output"
           grep -F 'restore_status=verified' <<< "$restore_output"
           printf '%s\n%s\n%s\n' "commit=$GITHUB_SHA" "$backup_output" "$restore_output" > artifacts-security/backup-restore-summary.txt
-          docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /bin/chmod avicola-pro-backup:ci -R a+rwX /tmp/restic
+          docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/find avicola-pro-backup:ci /tmp/restic -mindepth 1 -exec /bin/chmod a+rwX {} +
           cp -R .ci-restic .ci-restic-corrupt
           python -c 'from pathlib import Path; import sys; files=[path for path in Path(sys.argv[1], "data").rglob("*") if path.is_file()]; assert files; path=files[0]; stream=path.open("r+b"); original=stream.read(1); stream.seek(0); stream.write(bytes([original[0] ^ 255])); stream.close()' .ci-restic-corrupt
           printf '%s' 'intentionally-incorrect-synthetic-restic-key' > secrets/restic_wrong_password
@@ -368,7 +368,7 @@ jobs:
           docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
           rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key secrets/restic_repository secrets/restic_password secrets/restore_target_database_url secrets/restic_wrong_password
           if [ -d .ci-restic ]; then
-            docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /bin/chmod avicola-pro-backup:ci -R a+rwX /tmp/restic || true
+            docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/find avicola-pro-backup:ci /tmp/restic -mindepth 1 -exec /bin/chmod a+rwX {} + || true
           fi
           rm -rf .ci-restic .ci-restic-corrupt
       - name: Preserve synthetic backup and restore evidence
