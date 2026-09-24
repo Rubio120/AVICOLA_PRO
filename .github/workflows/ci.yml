@@ -345,7 +345,7 @@ jobs:
           grep -F 'Restore reconciliation passed (9 checks)' <<< "$restore_output"
           grep -F 'restore_status=verified' <<< "$restore_output"
           printf '%s\n%s\n%s\n' "commit=$GITHUB_SHA" "$backup_output" "$restore_output" > artifacts-security/backup-restore-summary.txt
-          chmod -R a+rwX .ci-restic
+          docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /bin/chmod avicola-pro-backup:ci -R a+rwX /tmp/restic
           cp -R .ci-restic .ci-restic-corrupt
           python -c 'from pathlib import Path; import sys; files=[path for path in Path(sys.argv[1], "data").rglob("*") if path.is_file()]; assert files; path=files[0]; stream=path.open("r+b"); original=stream.read(1); stream.seek(0); stream.write(bytes([original[0] ^ 255])); stream.close()' .ci-restic-corrupt
           printf '%s' 'intentionally-incorrect-synthetic-restic-key' > secrets/restic_wrong_password

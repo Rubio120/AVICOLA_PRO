@@ -227,6 +227,8 @@ def test_ci_runs_an_encrypted_backup_restore_roundtrip_to_an_isolated_database()
     assert 'test "$source_database_url" != "$restore_target_database_url"' in script
     assert "nine checks" in script.lower() or "9 checks" in script
     assert "grep -F 'Restore reconciliation passed (9 checks)'" in script
+    assert "docker run --rm --user 10002:10002" in script
+    assert script.index("--entrypoint /bin/chmod avicola-pro-backup:ci") < script.index("cp -R .ci-restic")
     assert "wrong" in script.lower()
     assert "corrupt" in script.lower()
     assert cleanup["if"] == "always()"
