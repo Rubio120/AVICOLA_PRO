@@ -13,6 +13,7 @@ ENTRYPOINT = PROJECT_ROOT / "deploy" / "entrypoints" / "backend.py"
 COMPOSE_FILE = PROJECT_ROOT / "deploy" / "compose" / "compose.production.yml"
 BACKUP_COMPOSE_FILE = PROJECT_ROOT / "deploy" / "backup" / "compose.backup.yml"
 CI_WORKFLOW_FILE = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+BACKEND_DOCKERFILE = PROJECT_ROOT / "backend" / "Dockerfile"
 
 
 def _entrypoint_environment(tmp_path: Path) -> tuple[dict[str, str], str, str]:
@@ -34,6 +35,12 @@ def _entrypoint_environment(tmp_path: Path) -> tuple[dict[str, str], str, str]:
     environment["AVICOLA_DATABASE_URL_FILE"] = str(database_file)
     environment["AVICOLA_SESSION_HMAC_KEY_FILE"] = str(session_file)
     return environment, database_url, session_key
+
+
+def test_backend_runtime_uses_trivy_fixed_setuptools_version() -> None:
+    dockerfile = BACKEND_DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "setuptools==78.1.1" in dockerfile
 
 
 def test_container_entrypoint_loads_mounted_secrets_without_leaking_them(tmp_path: Path) -> None:
