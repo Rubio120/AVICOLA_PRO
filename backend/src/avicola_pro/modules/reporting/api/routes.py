@@ -13,6 +13,13 @@ from avicola_pro.modules.reporting.domain.rules import ReportFilter, build_csv, 
 from avicola_pro.shared.api.errors import ForbiddenError, UnauthorizedError
 
 
+class MetricResponse(BaseModel):
+    value: str | None
+    unit: str
+    available: bool
+    reason: str | None
+
+
 class DashboardResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sales_documents: int
@@ -23,6 +30,7 @@ class DashboardResponse(BaseModel):
     accounts_receivable: str
     cash_balance: str
     confirmed_costs: str
+    poultry_metrics: dict[str, MetricResponse]
 
 
 class ProfitabilityRow(BaseModel):
@@ -48,6 +56,26 @@ class CommercialSalesRow(BaseModel):
     credit_notes: int
     customers_with_documents: int
     net_revenue: str
+
+
+def dashboard_payload(values: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in values.items():
+        if key == "poultry_metrics":
+            payload[key] = {
+                name: {
+                    "value": None if metric.value is None else str(metric.value),
+                    "unit": metric.unit,
+                    "available": metric.available,
+                    "reason": metric.reason,
+                }
+                for name, metric in value.items()
+            }
+        elif key == "sales_documents":
+            payload[key] = value
+        else:
+            payload[key] = str(value)
+    return payload
 
 
 def build_reporting_router(
@@ -115,8 +143,7 @@ def build_reporting_router(
     ) -> DashboardResponse:
         async with database.session_factory() as session:
             values = await reader.dashboard(session, report_filters)
-            payload = {key: str(value) if key != "sales_documents" else value for key, value in values.items()}
-            return DashboardResponse(**payload)
+            return DashboardResponse(**dashboard_payload(values))
 
     @router.get("/profitability", response_model=PageResponse)
     async def profitability(

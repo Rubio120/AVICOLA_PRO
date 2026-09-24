@@ -11,6 +11,7 @@ type Dashboard = {
   accounts_receivable: string;
   cash_balance: string;
   confirmed_costs: string;
+  poultry_metrics: Record<string, { value: string | null; unit: string; available: boolean; reason: string | null }>;
 };
 
 type CommercialRow = {
@@ -62,16 +63,51 @@ export function ReportingPanel() {
       {state === "loading" ? <p role="status">Cargando indicadores…</p> : null}
       {state === "error" ? <p role="alert">No se pudieron cargar los reportes.</p> : null}
       {state === "ready" && dashboard ? (
-        <dl className="report-grid">
-          <div><dt>Ventas emitidas</dt><dd>{dashboard.sales_documents}</dd></div>
-          <div><dt>Ventas PYG</dt><dd>{dashboard.sales_total}</dd></div>
-          <div><dt>Inventario PYG</dt><dd>{dashboard.inventory_value}</dd></div>
-          <div><dt>Aves vivas</dt><dd>{dashboard.live_birds}</dd></div>
-          <div><dt>Por pagar PYG</dt><dd>{dashboard.accounts_payable}</dd></div>
-          <div><dt>Por cobrar PYG</dt><dd>{dashboard.accounts_receivable}</dd></div>
-          <div><dt>Caja PYG</dt><dd>{dashboard.cash_balance}</dd></div>
-          <div><dt>Costos confirmados</dt><dd>{dashboard.confirmed_costs}</dd></div>
-        </dl>
+        <>
+          <dl className="report-grid">
+            <div><dt>Ventas emitidas</dt><dd>{dashboard.sales_documents}</dd></div>
+            <div><dt>Ventas PYG</dt><dd>{dashboard.sales_total}</dd></div>
+            <div><dt>Inventario PYG</dt><dd>{dashboard.inventory_value}</dd></div>
+            <div><dt>Aves vivas</dt><dd>{dashboard.live_birds}</dd></div>
+            <div><dt>Por pagar PYG</dt><dd>{dashboard.accounts_payable}</dd></div>
+            <div><dt>Por cobrar PYG</dt><dd>{dashboard.accounts_receivable}</dd></div>
+            <div><dt>Caja PYG</dt><dd>{dashboard.cash_balance}</dd></div>
+            <div><dt>Costos confirmados</dt><dd>{dashboard.confirmed_costs}</dd></div>
+          </dl>
+          <h3>Indicadores de producción y ventas</h3>
+          <dl className="report-grid">
+            {Object.entries(dashboard.poultry_metrics).map(([key, metric]) => {
+              const labels: Record<string, string> = {
+                posture: "Huevos por ave promedio",
+                feed_per_bird: "Alimento por ave",
+                feed_conversion: "Conversión alimenticia",
+                feed_cost_per_egg: "Costo confirmado de alimento por huevo vendible",
+                average_ticket: "Ticket promedio neto",
+                new_customers: "Clientes nuevos",
+                stock_coverage: "Cobertura de stock",
+              };
+              const reasons: Record<string, string> = {
+                average_live_birds_missing: "Faltan registros de aves vivas.",
+                average_live_birds_is_zero: "No hay aves vivas registradas en el período.",
+                feed_data_missing: "No hay consumos de alimento registrados.",
+                feed_unit_not_kg_or_unconfirmed: "La unidad o confirmación del alimento no permite calcularlo.",
+                feed_cost_unconfirmed: "El consumo no tiene costo de inventario confirmado.",
+                egg_count_is_zero: "No hay huevos producidos en el período.",
+                saleable_egg_count_is_zero: "No hay huevos vendibles clasificados en el período.",
+                issued_invoice_count_is_zero: "No hay facturas emitidas en el período.",
+                customer_identity_missing: "Hay facturas sin cliente asociado; no se puede identificar la primera venta.",
+                historical_sales_conversion_missing: "Falta conservar la conversión de presentación de cada venta histórica.",
+              };
+              return (
+                <div key={key}>
+                  <dt>{labels[key] ?? key}</dt>
+                  <dd>{metric.available && metric.value !== null ? `${metric.value} ${metric.unit}` : "No disponible"}</dd>
+                  {!metric.available && metric.reason ? <small>{reasons[metric.reason] ?? "Faltan datos confirmados."}</small> : null}
+                </div>
+              );
+            })}
+          </dl>
+        </>
       ) : null}
       {state === "ready" ? (
         <>
@@ -86,7 +122,6 @@ export function ReportingPanel() {
               ))}
             </ul>
           ) : null}
-          <p>Clientes nuevos y ticket promedio: pendientes de definición de negocio.</p>
           <a href="/api/v1/reports/profitability.xlsx" download="profitability.xlsx">
             Exportar reporte XLSX
           </a>

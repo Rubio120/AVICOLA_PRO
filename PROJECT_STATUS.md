@@ -1,5 +1,11 @@
 # Estado de AVÍCOLA PRO
 
+## Estado actual - 2026-09-24
+
+Validacion local del cambio de indicadores: backend 316/316 pruebas aprobadas, cobertura total 80.09%; frontend 56/56, lint, TypeScript y build de produccion aprobados. Los indicadores implementados usan solo hechos confirmados y muestran como no disponibles los datos faltantes. No se calcula costo total por huevo ni margen de canal hasta aprobar sus politicas.
+
+D11 y D12 siguen ABIERTAS: falta CI remota verde para el SHA final, resolver sin excepciones los hallazgos HIGH/CRITICAL de las imagenes, verificar Compose/migracion/backup/restauracion y confirmar el bundle de release. El fallo de migracion anterior requiere evidencia del siguiente run. No se desplego el sistema; no esta certificado para produccion.
+
 ## Última actualización
 
 2026-09-23 - Entregas 0-10 cerradas. D11/D12 siguen sin cierre certificado: el último run `35890371500` pasó Windows, PostgreSQL, dependencias, código fuente y render Compose, pero `deployment-images` falló en las pruebas upstream de Restic, por lo que scans, Compose runtime, backup/restore y bundle/attestation fueron omitidos. En local, 246/246 pruebas backend pasaron en PostgreSQL 16 con 80,86 % cobertura; Ruff/formato/Mypy y pip-audit pasaron. Frontend lint, TypeScript, build y npm audit pasaron; Vitest local fue bloqueado por acceso de esbuild fuera del workspace, debe confirmarlo CI. Gate D12 ya valida bundle firmado, hashes, SBOM, SARIF, commit/ref/tag y edad. Falta CI fresco del SHA final. Sin despliegue; no hay registry digest, restore off-host ni aprobación RPO/RTO.

@@ -159,3 +159,16 @@ Este orden no asigna todavía números oficiales de entrega posteriores a D12 ni
 1. Revisar este documento y pedir correcciones o aprobarlo.
 2. Resolver las reglas de negocio enumeradas antes de implementar las métricas afectadas.
 3. Tras aprobar el documento, elaborar un plan de implementación por tareas y pruebas; el usuario revisará y escogerá el método de ejecución antes de modificar el producto.
+
+## 13. Bases de indicadores aprobadas por el usuario (2026-09-24)
+
+- Postura: huevos producidos del periodo / promedio de aves vivas observadas del periodo, en huevos por ave por periodo. No se convierte a porcentaje ni tasa diaria hasta aprobar cómo normalizar periodos de más de un día.
+- Alimento por ave: kg consumidos del periodo / promedio de aves vivas del periodo.
+- Conversión: kg de alimento del periodo / docenas de huevos producidos en ese periodo.
+- Costo de alimento por huevo: costo confirmado de alimento / huevos clasificados como vendibles.
+- Cliente nuevo: cliente cuya primera factura emitida cae dentro del periodo consultado.
+- Ticket promedio: ventas netas del periodo / facturas emitidas del periodo; las notas de crédito ajustan ventas netas y no incrementan el número de facturas.
+- Cobertura: stock vendible actual / ventas diarias promedio de los 30 días anteriores.
+- Costo total por huevo y margen por canal siguen pendientes hasta acordar asignaciones indirectas y devoluciones.
+
+El valor se calcula con Decimal y solo con hechos confirmados. El promedio de aves suma las observaciones de los lotes por cada fecha registrada y promedia esos totales diarios; no interpola días sin registros. Si falta denominador o evidencia de unidad/conversión, reporting devuelve el indicador no disponible con motivo; no asigna conversiones implícitas. Para alimento se aceptan directamente solo productos cuya unidad base configurada sea kg, con movimiento y documento de inventario confirmados y costo positivo para calcular costo/huevo. La cobertura usa ventas de huevo que puedan convertirse a unidades base con una conversión vigente al emitir el documento; si no hay evidencia histórica suficiente, queda no disponible. El conteo de clientes nuevos queda no disponible si hay facturas del período sin cliente asociado. Los valores derivados conservan precisión decimal y se redondean solo para presentación.

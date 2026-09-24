@@ -6,6 +6,14 @@ from typing import Any
 
 from sqlalchemy import text
 
+from avicola_pro.modules.reporting.domain.poultry_metrics import (
+    MetricResult,
+    average_ticket,
+    feed_conversion,
+    feed_cost_per_egg,
+    feed_per_bird,
+    posture_rate,
+)
 from avicola_pro.modules.reporting.domain.rules import ReportFilter
 
 
@@ -36,6 +44,125 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
     values = {
         "sales_documents": int(row.count),
         "sales_total": Decimal(row.total),
+    }
+    metric_params = {
+        "date_from": filters.date_from or date.min,
+        "date_to": filters.date_to or date.max,
+    }
+    metrics = await session.execute(
+        text(
+            """
+            select
+              (select coalesce(sum(pe.egg_count), 0) from egg_production_events pe
+               where pe.reversal_of_id is null
+                 and not exists (select 1 from egg_production_events reversal where reversal.reversal_of_id = pe.id)
+                 and pe.occurred_on >= :date_from
+                 and pe.occurred_on <= :date_to) as egg_count,
+              (select avg(daily.live_birds) from (
+                 select fdr.record_date, sum(fdr.observed_birds) as live_birds
+                 from flock_daily_records fdr
+                 where fdr.record_date >= :date_from and fdr.record_date <= :date_to
+                 group by fdr.record_date
+               ) daily) as average_live_birds,
+              (select count(*) from feed_consumption fc
+               where fc.occurred_on >= :date_from
+                 and fc.occurred_on <= :date_to) as feed_records,
+              (select count(*) from feed_consumption fc join products p on p.id = fc.product_id
+               join inventory_movements im on im.id = fc.inventory_movement_id
+               join inventory_documents d on d.id = im.document_id
+               where p.base_unit_code = 'kg' and d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+                 and im.reversal_of_id is null
+                 and fc.occurred_on >= :date_from
+                 and fc.occurred_on <= :date_to) as feed_records_in_kg,
+              (select count(*) from feed_consumption fc join products p on p.id = fc.product_id
+               join inventory_movements im on im.id = fc.inventory_movement_id
+               join inventory_documents d on d.id = im.document_id
+               where p.base_unit_code = 'kg' and d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+                 and im.reversal_of_id is null and im.unit_cost > 0
+                 and fc.occurred_on >= :date_from
+                 and fc.occurred_on <= :date_to) as costed_feed_records,
+              (select coalesce(sum(fc.quantity), 0) from feed_consumption fc
+               join products p on p.id = fc.product_id
+               join inventory_movements im on im.id = fc.inventory_movement_id
+               join inventory_documents d on d.id = im.document_id
+               where p.base_unit_code = 'kg' and d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+                 and im.reversal_of_id is null
+                 and fc.occurred_on >= :date_from
+                 and fc.occurred_on <= :date_to) as feed_kg,
+              (select coalesce(sum(-im.value_delta), 0) from feed_consumption fc
+               join products p on p.id = fc.product_id
+               join inventory_movements im on im.id = fc.inventory_movement_id
+               join inventory_documents d on d.id = im.document_id
+               where p.base_unit_code = 'kg' and d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+                 and im.reversal_of_id is null
+                 and fc.occurred_on >= :date_from
+                 and fc.occurred_on <= :date_to) as confirmed_feed_cost,
+              (select coalesce(sum(a.egg_count), 0) from egg_production_allocations a
+               join egg_production_classifications c on c.id = a.classification_id
+               join egg_production_events pe on pe.id = c.production_event_id
+               join egg_categories ec on ec.id = a.category_id
+               where ec.is_saleable and pe.reversal_of_id is null
+                 and not exists (select 1 from egg_production_events reversal where reversal.reversal_of_id = pe.id)
+                 and pe.occurred_on >= :date_from
+                 and pe.occurred_on <= :date_to) as saleable_egg_count,
+              (select count(*) from (
+                 select customer_id, min(document_date) as first_invoice from commercial_documents
+                 where status = 'ISSUED' and document_type = 'INVOICE' and customer_id is not null
+                 group by customer_id
+               ) first_invoices
+               where first_invoice >= :date_from
+                 and first_invoice <= :date_to) as new_customer_count,
+               (select count(*) from commercial_documents
+               where status = 'ISSUED' and document_type = 'INVOICE' and customer_id is null
+                 and document_date <= :date_to) as unassigned_invoice_count
+            """
+        ),
+        metric_params,
+    )
+    metric_row = metrics.one()
+    egg_count = int(metric_row.egg_count)
+    feed_records = int(metric_row.feed_records)
+    feed_records_in_kg = int(metric_row.feed_records_in_kg)
+    costed_feed_records = int(metric_row.costed_feed_records)
+    average_birds = None if metric_row.average_live_birds is None else Decimal(metric_row.average_live_birds)
+    feed_kg = Decimal(metric_row.feed_kg)
+    confirmed_feed_cost = Decimal(metric_row.confirmed_feed_cost)
+    if feed_records == 0:
+        feed_bird_metric = MetricResult(None, "kg/bird/period", False, "feed_data_missing")
+        feed_conversion_metric = MetricResult(None, "kg/dozen", False, "feed_data_missing")
+        feed_cost_metric = MetricResult(None, "currency/egg", False, "feed_data_missing")
+    elif feed_records_in_kg != feed_records:
+        feed_bird_metric = MetricResult(None, "kg/bird/period", False, "feed_unit_not_kg_or_unconfirmed")
+        feed_conversion_metric = MetricResult(None, "kg/dozen", False, "feed_unit_not_kg_or_unconfirmed")
+        feed_cost_metric = MetricResult(None, "currency/egg", False, "feed_unit_not_kg_or_unconfirmed")
+    else:
+        feed_bird_metric = (
+            MetricResult(None, "kg/bird/period", False, "average_live_birds_missing")
+            if average_birds is None
+            else feed_per_bird(feed_kg, average_birds)
+        )
+        feed_conversion_metric = feed_conversion(feed_kg, egg_count)
+        feed_cost_metric = (
+            MetricResult(None, "currency/egg", False, "feed_cost_unconfirmed")
+            if costed_feed_records != feed_records
+            else feed_cost_per_egg(confirmed_feed_cost, int(metric_row.saleable_egg_count))
+        )
+    values["poultry_metrics"] = {
+        "posture": (
+            MetricResult(None, "eggs/bird/period", False, "average_live_birds_missing")
+            if average_birds is None
+            else posture_rate(egg_count, average_birds)
+        ),
+        "feed_per_bird": feed_bird_metric,
+        "feed_conversion": feed_conversion_metric,
+        "feed_cost_per_egg": feed_cost_metric,
+        "average_ticket": average_ticket(Decimal(row.total), int(row.count)),
+        "new_customers": (
+            MetricResult(None, "customers", False, "customer_identity_missing")
+            if int(metric_row.unassigned_invoice_count) > 0
+            else MetricResult(Decimal(metric_row.new_customer_count), "customers", True)
+        ),
+        "stock_coverage": MetricResult(None, "days", False, "historical_sales_conversion_missing"),
     }
     for key, query in {
         "inventory_value": "select coalesce(sum(inventory_value), 0) as value from inventory_balances",

@@ -50,6 +50,20 @@ async def test_dashboard_aggregates_confirmed_operational_facts() -> None:
     session = FakeSession(
         [
             FakeResult(row=SimpleNamespace(count=2, total=Decimal("100.00"))),
+            FakeResult(
+                row=SimpleNamespace(
+                    egg_count=12_000,
+                    average_live_birds=Decimal("1000"),
+                    feed_kg=Decimal("200"),
+                    feed_records=2,
+                    feed_records_in_kg=2,
+                    costed_feed_records=2,
+                    confirmed_feed_cost=Decimal("125000"),
+                    saleable_egg_count=25_000,
+                    new_customer_count=1,
+                    unassigned_invoice_count=0,
+                )
+            ),
             *[FakeResult(scalar=Decimal("10.00")) for _ in range(6)],
         ]
     )
@@ -59,8 +73,106 @@ async def test_dashboard_aggregates_confirmed_operational_facts() -> None:
     assert result["sales_documents"] == 2
     assert result["sales_total"] == Decimal("100.00")
     assert result["cash_balance"] == Decimal("10.00")
+    assert result["poultry_metrics"]["posture"].value == Decimal("12")
+    assert result["poultry_metrics"]["feed_per_bird"].value == Decimal("0.2")
+    assert result["poultry_metrics"]["feed_conversion"].value == Decimal("0.2")
+    assert result["poultry_metrics"]["feed_cost_per_egg"].value == Decimal("5")
     assert session.statements[0][1] is not None
     assert "date_from" in session.statements[0][1]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_marks_feed_metrics_unavailable_when_unit_is_not_kg() -> None:
+    session = FakeSession(
+        [
+            FakeResult(row=SimpleNamespace(count=0, total=Decimal("0"))),
+            FakeResult(
+                row=SimpleNamespace(
+                    egg_count=0,
+                    average_live_birds=None,
+                    feed_kg=Decimal("0"),
+                    feed_records=1,
+                    feed_records_in_kg=0,
+                    costed_feed_records=0,
+                    confirmed_feed_cost=Decimal("0"),
+                    saleable_egg_count=0,
+                    new_customer_count=0,
+                    unassigned_invoice_count=0,
+                )
+            ),
+            *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+        ]
+    )
+
+    result = await reader.dashboard(session, ReportFilter())
+
+    assert result["poultry_metrics"]["feed_per_bird"].available is False
+    assert result["poultry_metrics"]["feed_per_bird"].reason == "feed_unit_not_kg_or_unconfirmed"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_marks_metrics_unavailable_for_missing_birds_cost_and_customer_identity() -> None:
+    session = FakeSession(
+        [
+            FakeResult(row=SimpleNamespace(count=0, total=Decimal("0"))),
+            FakeResult(
+                row=SimpleNamespace(
+                    egg_count=0,
+                    average_live_birds=None,
+                    feed_kg=Decimal("20"),
+                    feed_records=1,
+                    feed_records_in_kg=1,
+                    costed_feed_records=0,
+                    confirmed_feed_cost=Decimal("0"),
+                    saleable_egg_count=0,
+                    new_customer_count=0,
+                    unassigned_invoice_count=1,
+                )
+            ),
+            *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+        ]
+    )
+
+    result = await reader.dashboard(session, ReportFilter())
+    metrics = result["poultry_metrics"]
+
+    assert metrics["posture"].reason == "average_live_birds_missing"
+    assert metrics["feed_per_bird"].reason == "average_live_birds_missing"
+    assert metrics["feed_conversion"].reason == "egg_count_is_zero"
+    assert metrics["feed_cost_per_egg"].reason == "feed_cost_unconfirmed"
+    assert metrics["average_ticket"].reason == "issued_invoice_count_is_zero"
+    assert metrics["new_customers"].reason == "customer_identity_missing"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_marks_feed_unavailable_when_no_feed_records_exist() -> None:
+    session = FakeSession(
+        [
+            FakeResult(row=SimpleNamespace(count=0, total=Decimal("0"))),
+            FakeResult(
+                row=SimpleNamespace(
+                    egg_count=0,
+                    average_live_birds=Decimal("0"),
+                    feed_kg=Decimal("0"),
+                    feed_records=0,
+                    feed_records_in_kg=0,
+                    costed_feed_records=0,
+                    confirmed_feed_cost=Decimal("0"),
+                    saleable_egg_count=0,
+                    new_customer_count=0,
+                    unassigned_invoice_count=0,
+                )
+            ),
+            *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+        ]
+    )
+
+    result = await reader.dashboard(session, ReportFilter())
+
+    assert result["poultry_metrics"]["posture"].reason == "average_live_birds_is_zero"
+    assert result["poultry_metrics"]["feed_per_bird"].reason == "feed_data_missing"
+    assert result["poultry_metrics"]["feed_conversion"].reason == "feed_data_missing"
+    assert result["poultry_metrics"]["feed_cost_per_egg"].reason == "feed_data_missing"
 
 
 @pytest.mark.asyncio

@@ -217,6 +217,17 @@ jobs:
             -e 's#^BACKUP_IMAGE_REF=.*#BACKUP_IMAGE_REF=avicola-pro-backup:ci#' \
             deploy/compose/.env.production
           compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production)
+          capture_migrate_failure() {
+            status=$?
+            if (( status != 0 )); then
+              "${compose[@]}" ps --all > artifacts-security/compose-smoke-failure.log 2>&1 || true
+              "${compose[@]}" logs --no-color --timestamps migrate 2>&1 \
+                | sed -E 's#(postgresql\+psycopg://[^:]+:)[^@]+@#\1[REDACTED]@#g' \
+                >> artifacts-security/compose-smoke-failure.log || true
+              exit "$status"
+            fi
+          }
+          trap capture_migrate_failure ERR
           rendered="$("${compose[@]}" config --format json)"
           printf '%s' "$rendered" | python -c 'import json,sys; services=json.load(sys.stdin)["services"]; assert not services["db"].get("ports"), "database must remain private"; assert not services["backend"].get("ports"), "backend must remain private"; print("Database and backend have no host-published ports")'
           "${compose[@]}" up --detach --wait --wait-timeout 180 db backend frontend
@@ -280,7 +291,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-compose-smoke-evidence
-          path: artifacts-security/compose-smoke-summary.txt
+          path: |
+            artifacts-security/compose-smoke-summary.txt
+            artifacts-security/compose-smoke-failure.log
           if-no-files-found: ignore
           retention-days: 14
       - name: Run encrypted backup and isolated restore

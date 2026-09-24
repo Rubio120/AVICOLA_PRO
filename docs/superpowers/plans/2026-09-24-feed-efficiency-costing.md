@@ -37,9 +37,9 @@
 **Interfaces:**
 - Approved formula record includes metric name, unit, date range behavior, numerator, denominator, status inclusion, allocation rule, precision/rounding, empty-period result and at least one worked input/output example.
 
-- [ ] Present candidate definitions for posture %, feed per live bird, feed conversion, feed cost per egg, total cost per egg, channel margin and coverage days.
-- [ ] Record only user-approved formulas and sample calculations; if any is unapproved, keep that metric out of code and label it pending.
-- [ ] Do not start Tasks 2–4 for an unapproved metric.
+- [x] Present and record the user-approved formulas: eggs per average live bird (without inventing a percentage), feed kg per average live bird, kg/dozen, confirmed feed cost/saleable egg, average ticket and 30-day stock coverage.
+- [x] Keep unavailable inputs explicitly unavailable and do not invent values.
+- [x] Keep posture percentage normalization, total cost per egg and channel margin pending; do not calculate them before their period/allocation/returns policies are approved.
 
 ### Task 2: Implement pure metric rules with executable examples
 
@@ -50,10 +50,10 @@
 **Interfaces:**
 - Add one named function per approved formula, each accepting typed `Decimal` facts and returning a typed result with unit/availability reason; signatures mirror only the approved formula table.
 
-- [ ] Convert every worked business example from Task 1 into a failing unit test, including boundary, empty denominator and rounding cases.
-- [ ] Run `uv run pytest tests/unit/test_delivery13_metric_rules.py -q` and confirm failures before implementation.
-- [ ] Implement formulas using Decimal; no SQL, float, implicit package conversion or hidden defaults.
-- [ ] Rerun tests and Ruff/Mypy on the new module.
+- [x] Add executable formula, empty-denominator, invalid-input and count-type tests for the approved pure rules.
+- [x] Use the test-first workflow before implementation.
+- [x] Implement approved pure formulas using Decimal and explicit units/availability reasons.
+- [x] Rerun focused tests, Ruff and MyPy; the full backend suite is recorded below.
 
 ### Task 3: Feed approved costs and egg facts through costing/reporting
 
@@ -64,7 +64,14 @@
 **Interfaces:**
 - Reporting response carries value, unit, period and availability/status for each metric; estimated results have explicit `estimated` status.
 
-- [ ] Add PostgreSQL integration fixtures for shared costs, multiple flocks and reversals; prove reconciliation and exact approved result.
-- [ ] Add regression preventing existing fake `cost=0 / margin=revenue` from being presented as actual profitability.
-- [ ] Implement query-port reads and costing allocations only under approved policies; preserve module boundaries.
-- [ ] Run focused costing/reporting integration tests, migration tests if schema changes, and dependency architecture checks.
+- [ ] Add repeatable PostgreSQL integration fixtures for metric aggregation, multiple flocks and reversal boundaries; current SQL received a local PostgreSQL smoke test but is not yet covered by dedicated integration fixtures.
+- [x] Keep total cost/egg and margin unavailable rather than presenting placeholder `cost=0` or `margin=revenue` as profitability.
+- [x] Implement read-only reporting queries over confirmed facts, with unknown inputs represented as unavailable.
+- [x] Run dependency architecture checks and the complete backend suite; focused PostgreSQL smoke passed. Dedicated metric integration fixtures remain open.
+
+## Validation snapshot — 2026-09-24
+
+- Backend: 316 tests passed; 80.09% total coverage (minimum 80%).
+- Frontend: 56 tests passed, 87.97% statements / 80.55% branches; lint, TypeScript and production build passed.
+- D11/D12 remain open until a fresh remote CI verifies the exact pushed commit, image scans, Compose startup and backup/restore, plus the release bundle verification.
+- No production deployment was performed. Historical coverage gaps and pending business formulas are not represented as closed.

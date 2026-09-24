@@ -6,6 +6,10 @@ Todos los cambios relevantes se documentan siguiendo categorías Added, Changed,
 
 ### Added
 
+- Dashboard de produccion/ventas con reglas Decimal aprobadas: huevos por ave observada, alimento por ave, conversión alimenticia, costo confirmado de alimento por huevo vendible, ticket promedio y clientes nuevos.
+- Los indicadores muestran "no disponible" con motivo cuando faltan aves, unidades, costo confirmado, cliente asociado o conversiones históricas; no se calculan cobertura, costo total por huevo, margen ni postura porcentual sin evidencia/regla suficiente.
+- Pruebas de reglas, lector PostgreSQL, serialización del API y estados visibles para las métricas.
+- CI conserva logs del servicio de migraciones de Compose, sanitizando contraseñas en URLs para diagnóstico de fallos.
 - Validacion local adicional D11/D12 en PostgreSQL sintetico: migracion limpia, upgrade, smoke local y evidencia en `artifacts/quality/delivery-11/local-validation-2026-09-22.md`; no sustituye CI/staging/off-host.
 - Preparación D11: imágenes backend/frontend no-root, Caddy/TLS, Compose privado con migración previa, backup/restauración Restic cifrados, reconciliación y runbooks.
 - Smoke configurable de disponibilidad/rendimiento con camino autenticado opcional mediante cuenta sintética.
