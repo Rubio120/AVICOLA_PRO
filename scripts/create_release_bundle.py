@@ -122,7 +122,7 @@ def build_release_bundle(
             "event": source_event,
         },
         "source": {"commit": commit, "ref": source_ref},
-        "migration": {"head": "0010_costing"},
+        "migration": {"head": "0013_sales_channel"},
         "gates": {
             "windows_toolchains": "passed",
             "postgresql_integration": "passed",

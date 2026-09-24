@@ -1,6 +1,8 @@
 FROM golang:1.26.8-trixie AS restic-builder
+ARG GO_VERSION=1.26.8
 ARG RESTIC_VERSION=0.19.1
 ARG RESTIC_COMMIT=6aa3a516ce654808a1f28f9fa21e9b7c8e6e90bf
+ENV GOTOOLCHAIN=local
 WORKDIR /src/restic
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes python3 python-is-python3 \
@@ -23,6 +25,18 @@ ENV GOCACHE=/tmp/go-build-cache
 # Root can read chmod-restricted fixtures, invalidating these permission-denial tests.
 RUN go test ./... -skip 'TestMount|TestScannerError|TestBackupErrors|TestArchiverErrorReporting/(file-unreadable|file-unreadable-ignore-error|file-subdir-unreadable|file-subdir-unreadable-ignore-error)'
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/restic ./cmd/restic
+RUN set -eu; \
+    expected="go${GO_VERSION}"; \
+    actual="$(go version | awk '{print $3}')"; \
+    if [ "$actual" != "$expected" ]; then \
+        echo >&2 "Go compiler mismatch: expected $expected, got $actual"; \
+        exit 1; \
+    fi; \
+    go version -m /out/restic | tee /tmp/restic-buildinfo; \
+    if ! grep -Fx "/out/restic: ${expected}" /tmp/restic-buildinfo; then \
+        echo >&2 "Restic binary toolchain mismatch: expected $expected"; \
+        exit 1; \
+    fi
 
 FROM postgres:16.15-trixie
 

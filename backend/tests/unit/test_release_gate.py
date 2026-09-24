@@ -16,7 +16,7 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
-EXPECTED_HEAD = "0010_costing"
+EXPECTED_HEAD = "0013_sales_channel"
 EXPECTED_TAG = "v0.1.0-rc.1"
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 GIT = shutil.which("git")
@@ -136,6 +136,7 @@ def test_authenticated_bundle_can_be_technically_ready_without_claiming_pilot_or
         (lambda m, f, a: m["source"].update(ref="refs/heads/other"), "ref"),
         (lambda m, f, a: m["workflow"].update(path=".github/workflows/other.yml"), "workflow"),
         (lambda m, f, a: m["gates"].update(image_security="failed"), "image_security"),
+        (lambda m, f, a: m["migration"].update(head="0010_costing"), "migration"),
         (lambda m, f, a: m["migration"].update(head="0009_treasury"), "migration"),
         (lambda m, f, a: m["images"]["backend"].update(archive_sha256="0" * 64), "archive hash"),
         (lambda m, f, a: m["sboms"]["frontend"].update(sha256="0" * 64), "SBOM hash"),

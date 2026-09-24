@@ -58,7 +58,7 @@ def test_release_bundle_manifest_binds_images_sboms_reports_and_source(tmp_path:
     )
 
     assert manifest["source"]["commit"] == "a" * 40
-    assert manifest["migration"]["head"] == "0010_costing"
+    assert manifest["migration"]["head"] == "0013_sales_channel"
     assert manifest["gates"]["backup_restore"] == "passed"
     expected_hash = hashlib.sha256(b"image-backend").hexdigest()
     assert manifest["images"]["backend"]["archive_sha256"] == expected_hash

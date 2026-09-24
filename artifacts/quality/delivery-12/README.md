@@ -22,12 +22,12 @@ El verificador local requiere GitHub CLI (`gh`) autenticado con permiso para lee
   -ExpectedCommit <40-hex-del-run> `
   -ExpectedSourceRef refs/heads/<rama-del-run> `
   -ExpectedTag <tag-local-aprobado> `
-  -ExpectedMigrationHead 0010_costing `
+  -ExpectedMigrationHead 0013_sales_channel `
   -MaxEvidenceAgeHours <limite-aprobado> `
   -Report artifacts/quality/delivery-12/rc-report.json
 ```
 
-El resultado `technical_status: ready_for_user_deployment` significa que la evidencia CI autenticada corresponde al commit/ref indicados, que la etiqueta local, Alembic `0010_costing`, archivos de imagen/SBOM/reportes y antigüedad cumplen el gate. Es una autorización técnica para que el usuario haga pruebas y gestione el despliegue; no prueba el entorno real ni reemplaza su decisión operativa. El informe separa los SHA-256 de los archivos de imagen y los Docker image IDs. No contiene `registry_manifest_digest`, porque todavía no hay publicación en registry.
+El resultado `technical_status: ready_for_user_deployment` significa que la evidencia CI autenticada corresponde al commit/ref indicados, que la etiqueta local, Alembic `0013_sales_channel`, archivos de imagen/SBOM/reportes y antigüedad cumplen el gate. Es una autorización técnica para que el usuario haga pruebas y gestione el despliegue; no prueba el entorno real ni reemplaza su decisión operativa. El informe separa los SHA-256 de los archivos de imagen y los Docker image IDs. No contiene `registry_manifest_digest`, porque todavía no hay publicación en registry.
 
 El modo `pilot` permanece bloqueado: este paquete solo acredita un restore sintético local de CI. Aún hacen falta destino de backup off-host, restauración en staging real, tiempos observados, RPO/RTO y retención aprobados, owner y aprobador nombrados, además de la validación operativa correspondiente. No se deben introducir datos o aprobaciones ficticios para desbloquearlo.
 
