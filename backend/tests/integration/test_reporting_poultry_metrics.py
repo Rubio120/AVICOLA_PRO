@@ -307,6 +307,7 @@ async def _seed_fixture(
             ),
         )
     )
+    await session.flush()
     session.add_all(
         (
             EggProductionAllocation(
