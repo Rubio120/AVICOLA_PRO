@@ -439,6 +439,7 @@ class ProductionService:
             actor_user_id=actor_user_id,
         )
         session.add(classification)
+        await session.flush()
         for category_id, egg_count in allocations:
             session.add(
                 EggProductionAllocation(
