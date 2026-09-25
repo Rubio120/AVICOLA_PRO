@@ -20,12 +20,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    duplicate_event_id = op.get_bind().execute(
-        sa.text(
-            "select production_event_id from egg_production_classifications "
-            "group by production_event_id having count(*) > 1 limit 1"
+    duplicate_event_id = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "select production_event_id from egg_production_classifications "
+                "group by production_event_id having count(*) > 1 limit 1"
+            )
         )
-    ).scalar_one_or_none()
+        .scalar_one_or_none()
+    )
     if duplicate_event_id is not None:
         raise RuntimeError("cannot restore one-classification-per-event uniqueness while classification history exists")
     op.create_unique_constraint(
