@@ -131,7 +131,7 @@ def test_runbooks_keep_restore_target_permissions_and_destructive_actions_safe()
     assert "alembic downgrade" in rollback
     assert "base aislada" in rollback
     assert "prune" in incident.lower() and "no ejecutar" in incident.lower()
-    assert "No ejecutarlo en producci�n sin aprobaci�n" in install
+    assert "No ejecutarlo en producción sin aprobación" in install
 
 
 def test_deployment_compose_uses_immutable_image_digest_references() -> None:
