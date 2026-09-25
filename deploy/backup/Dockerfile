@@ -44,6 +44,7 @@ COPY --from=restic-builder /out/restic /usr/local/bin/restic
 RUN apt-get update \
     && apt-get upgrade --yes \
     && apt-get install --no-install-recommends --yes python3 ca-certificates \
+    && rm -f /usr/local/bin/gosu \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10002 avicola-backup \
     && useradd --system --uid 10002 --gid avicola-backup --home-dir /tmp --shell /usr/sbin/nologin avicola-backup \
