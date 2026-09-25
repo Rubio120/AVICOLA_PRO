@@ -354,6 +354,7 @@ def test_backup_restic_is_rebuilt_with_security_fixed_go_dependencies() -> None:
     assert "does not expose /dev/fuse" in dockerfile
     assert "COPY --from=restic-builder" in dockerfile
     assert "COPY --from=restic/restic:" not in dockerfile
+    assert "rm -f /usr/local/bin/gosu" in dockerfile
 
 
 def test_trivy_sarif_scans_limit_report_severities_to_the_configured_gate() -> None:
