@@ -273,9 +273,7 @@ async def test_profitability_applies_selected_channel_to_page_and_count() -> Non
 
     for statement, params in session.statements:
         assert "channel = :channel" in str(statement)
-        assert params == {"channel": "WHOLESALE", "offset": 0, "limit": 50} or params == {
-            "channel": "WHOLESALE"
-        }
+        assert params == {"channel": "WHOLESALE", "offset": 0, "limit": 50} or params == {"channel": "WHOLESALE"}
 
 
 @pytest.mark.asyncio

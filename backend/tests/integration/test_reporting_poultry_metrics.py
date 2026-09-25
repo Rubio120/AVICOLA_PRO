@@ -56,9 +56,7 @@ async def test_dashboard_aggregates_confirmed_poultry_and_commercial_facts_acros
     assert metrics["average_ticket"].value == Decimal("1250")
     assert metrics["new_customers"].value == Decimal("1")
     assert result["daily_mortality"] == [{"occurred_on": date(2026, 1, 10), "deaths": Decimal("3")}]
-    ages = [
-        age for age in result["active_flock_ages"] if age["flock_code"].startswith(("FLOCK-A-", "FLOCK-B-"))
-    ]
+    ages = [age for age in result["active_flock_ages"] if age["flock_code"].startswith(("FLOCK-A-", "FLOCK-B-"))]
     assert [(age["flock_code"].split("-")[1], age["days_since_entry"]) for age in ages] == [
         ("A", (date.today() - PERIOD_FROM).days),
         ("B", (date.today() - PERIOD_FROM).days),

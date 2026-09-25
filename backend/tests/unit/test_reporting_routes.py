@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -32,9 +33,7 @@ def test_dashboard_payload_preserves_counts_and_serializes_available_and_missing
             "confirmed_costs": Decimal("125"),
             "daily_mortality": [{"occurred_on": date(2026, 1, 10), "deaths": Decimal("2.0")}],
             "active_flock_ages": [{"flock_code": "SYNTHETIC", "days_since_entry": 10, "as_of": date(2026, 1, 31)}],
-            "feed_consumption_by_house": [
-                {"house_code": None, "unit_code": "kg", "quantity": Decimal("2.50")}
-            ],
+            "feed_consumption_by_house": [{"house_code": None, "unit_code": "kg", "quantity": Decimal("2.50")}],
             "poultry_metrics": {
                 "posture": MetricResult(Decimal("0.9"), "eggs/bird/period", True),
                 "feed_per_bird": MetricResult(None, "kg/bird/period", False, "feed_data_missing"),
@@ -74,9 +73,12 @@ def test_dashboard_route_accepts_and_preserves_channel_filter() -> None:
         route for route in router.routes if isinstance(route, APIRoute) and route.path == "/api/v1/reports/dashboard"
     )
     channel_dependency = next(
-        dependency for dependency in route.dependant.dependencies if dependency.call.__name__ == "channel_filters"
+        dependency
+        for dependency in route.dependant.dependencies
+        if dependency.call is not None and dependency.call.__name__ == "channel_filters"
     )
 
+    assert channel_dependency.call is not None
     report_filter = channel_dependency.call(
         date_from=date(2026, 1, 1),
         date_to=date(2026, 1, 31),
@@ -85,9 +87,7 @@ def test_dashboard_route_accepts_and_preserves_channel_filter() -> None:
         limit=50,
     )
 
-    assert report_filter == ReportFilter(
-        date_from=date(2026, 1, 1), date_to=date(2026, 1, 31), channel="WHOLESALE"
-    )
+    assert report_filter == ReportFilter(date_from=date(2026, 1, 1), date_to=date(2026, 1, 31), channel="WHOLESALE")
 
 
 @pytest.mark.asyncio
@@ -95,17 +95,17 @@ async def test_xlsx_export_uses_channel_filter_audits_and_enforces_row_limit(mon
     from avicola_pro.modules.reporting.infrastructure import reader
 
     class Session:
-        def begin(self):
+        def begin(self) -> "Session":
             return self
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> "Session":
             return self
 
         async def __aexit__(self, *_: object) -> None:
             return None
 
     session = Session()
-    audit_rows: list[object] = []
+    audit_rows: list[Any] = []
     database = SimpleNamespace(session_factory=lambda: session)
     router = build_reporting_router(
         object(),

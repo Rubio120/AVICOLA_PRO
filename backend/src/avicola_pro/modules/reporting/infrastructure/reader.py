@@ -242,8 +242,7 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
         {"date_from": filters.date_from or date.min, "date_to": filters.date_to or date.max},
     )
     values["daily_mortality"] = [
-        {"occurred_on": item["occurred_on"], "deaths": Decimal(item["deaths"])}
-        for item in mortality_result.mappings()
+        {"occurred_on": item["occurred_on"], "deaths": Decimal(item["deaths"])} for item in mortality_result.mappings()
     ]
 
     age_as_of = date.today()

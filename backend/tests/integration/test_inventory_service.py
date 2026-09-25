@@ -233,18 +233,10 @@ async def test_concurrent_issues_cannot_oversell_the_same_inventory_balance() ->
             )
         )
         statuses = list(
-            (
-                await session.scalars(
-                    select(InventoryDocument.status).where(InventoryDocument.id.in_(issue_ids))
-                )
-            ).all()
+            (await session.scalars(select(InventoryDocument.status).where(InventoryDocument.id.in_(issue_ids)))).all()
         )
         movements = list(
-            (
-                await session.scalars(
-                    select(InventoryMovement).where(InventoryMovement.document_id.in_(issue_ids))
-                )
-            ).all()
+            (await session.scalars(select(InventoryMovement).where(InventoryMovement.document_id.in_(issue_ids)))).all()
         )
         assert balance is not None
         assert balance.quantity == Decimal("4.0000")

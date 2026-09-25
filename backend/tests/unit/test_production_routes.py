@@ -247,6 +247,7 @@ async def test_egg_classification_history_endpoint_returns_reversed_and_current_
 ) -> None:
     event_id, old_classification_id, category_id, warehouse_id = (uuid4() for _ in range(4))
     session = object()
+
     async def list_history(received_session: object, received_event_id: object) -> list[dict[str, object]]:
         assert received_session is session
         assert received_event_id == event_id
