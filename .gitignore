@@ -1,0 +1,50 @@
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+!**/.env.example
+secrets/
+artifacts-security/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+coverage/
+
+# Local tools and caches
+.cache/
+.tools/
+.worktrees/
+
+# Quality evidence generated locally
+artifacts/quality/**
+!artifacts/quality/.gitkeep
+!/artifacts/quality/delivery-11/
+/artifacts/quality/delivery-11/*
+!/artifacts/quality/delivery-11/backup-restore/
+/artifacts/quality/delivery-11/backup-restore/*
+!/artifacts/quality/delivery-11/backup-restore/local-roundtrip-2026-09-22.md
+!/artifacts/quality/delivery-11/local-validation-2026-09-22.md
+!/artifacts/quality/delivery-12/
+/artifacts/quality/delivery-12/*
+!/artifacts/quality/delivery-12/README.md
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+
+frontend/tsconfig.tsbuildinfo

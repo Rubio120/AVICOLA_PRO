@@ -1,0 +1,672 @@
+name: quality
+
+on:
+  push:
+    branches: [master, "delivery/**", "weekend/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-toolchains:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend locked install and checks
+        working-directory: backend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          uv sync --frozen --all-groups
+          uv lock --check
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run mypy src tests
+          uv run pytest -m "not integration" --no-cov
+      - name: Frontend locked install and checks
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+        env:
+          BACKEND_INTERNAL_URL: http://127.0.0.1:8000
+
+  postgresql-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.14-alpine
+        env:
+          POSTGRES_DB: avicola_pro
+          POSTGRES_USER: avicola
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U avicola -d avicola_pro"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+          enable-cache: true
+      - name: Install backend from lockfile
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+      - name: Migrate and test with PostgreSQL 16
+        working-directory: backend
+        run: |
+          test "$AVICOLA_TEST_DATABASE_URL" != "$AVICOLA_DATABASE_URL"
+          PGPASSWORD=ci-only-password createdb --host 127.0.0.1 --username avicola avicola_pro_test
+          uv run alembic upgrade head
+          uv run pytest
+        env:
+          AVICOLA_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro
+          AVICOLA_TEST_DATABASE_URL: postgresql+psycopg://avicola:ci-only-password@127.0.0.1:5432/avicola_pro_test
+          AVICOLA_SESSION_HMAC_KEY: ci-only-session-hmac-key-not-for-production-32-bytes-minimum
+
+  dependency-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare report directory
+        run: mkdir -p artifacts-security
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.15"
+          python-version: "3.13.15"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Audit locked Python dependencies
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-groups
+          uv run pip-audit --format=json --output=../artifacts-security/pip-audit.json
+      - name: Audit locked Node dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high --json > ../artifacts-security/npm-audit.json
+      - name: Preserve machine-readable dependency reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-reports
+          path: artifacts-security/*.json
+          if-no-files-found: ignore
+
+  source-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan source for secrets and unsafe configuration
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          format: sarif
+          output: trivy-source.sarif
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+      - name: Preserve machine-readable source scan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-security-sarif
+          path: trivy-source.sarif
+          if-no-files-found: ignore
+
+  deployment-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build locked non-root runtime images
+        run: |
+          docker build --file backend/Dockerfile --tag avicola-pro-backend:ci .
+          docker build --file frontend/Dockerfile --tag avicola-pro-frontend:ci .
+          docker build --file deploy/backup/Dockerfile --tag avicola-pro-backup:ci .
+          test "$(docker image inspect avicola-pro-backend:ci --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect avicola-pro-frontend:ci --format '{{.Config.User}}')" = "node"
+          test "$(docker image inspect avicola-pro-backup:ci --format '{{.Config.User}}')" = "10002:10002"
+      - name: Scan backend runtime image
+        id: backend_image_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-backend:ci
+          format: sarif
+          output: trivy-backend.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+      - name: Scan frontend runtime image
+        id: frontend_image_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-frontend:ci
+          format: sarif
+          output: trivy-frontend.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+      - name: Scan backup runtime image
+        id: backup_image_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scanners: vuln
+          image-ref: avicola-pro-backup:ci
+          format: sarif
+          output: trivy-backup.sarif
+          exit-code: "1"
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+      - name: Smoke-test backend secret entrypoint in Linux container
+        shell: bash
+        run: |
+          mkdir -p secrets
+          printf '%s' 'postgresql+psycopg://avicola:synthetic-postgres-password@db:5432/avicola_pro' > secrets/database_url
+          python -c 'import secrets; from pathlib import Path; import base64; Path("secrets/session_hmac_key").write_text(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("="))'
+          docker run --rm \
+            --mount "type=bind,source=$PWD/secrets/database_url,target=/run/secrets/database_url,readonly" \
+            --mount "type=bind,source=$PWD/secrets/session_hmac_key,target=/run/secrets/session_hmac_key,readonly" \
+            --env AVICOLA_DATABASE_URL_FILE=/run/secrets/database_url \
+            --env AVICOLA_SESSION_HMAC_KEY_FILE=/run/secrets/session_hmac_key \
+            avicola-pro-backend:ci python -c 'import os; assert os.environ["AVICOLA_DATABASE_URL"].startswith("postgresql+psycopg://"); assert len(os.environ["AVICOLA_SESSION_HMAC_KEY"]) >= 43; assert "AVICOLA_DATABASE_URL_FILE" not in os.environ; print("Secrets loaded; values withheld")'
+      - name: Run isolated Compose application smoke
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p secrets artifacts-security
+          postgres_password="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          session_key="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          printf '%s' "$postgres_password" > secrets/postgres_password
+          printf '%s' "postgresql+psycopg://avicola:${postgres_password}@db:5432/avicola_pro" > secrets/database_url
+          printf '%s' "$session_key" > secrets/session_hmac_key
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          sed -i \
+            -e 's#^BACKEND_IMAGE_REF=.*#BACKEND_IMAGE_REF=avicola-pro-backend:ci#' \
+            -e 's#^FRONTEND_IMAGE_REF=.*#FRONTEND_IMAGE_REF=avicola-pro-frontend:ci#' \
+            -e 's#^BACKUP_IMAGE_REF=.*#BACKUP_IMAGE_REF=avicola-pro-backup:ci#' \
+            deploy/compose/.env.production
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production)
+          capture_migrate_failure() {
+            status=$?
+            if (( status != 0 )); then
+              "${compose[@]}" ps --all > artifacts-security/compose-smoke-failure.log 2>&1 || true
+              "${compose[@]}" logs --no-color --timestamps migrate 2>&1 \
+                | sed -E 's#(postgresql\+psycopg://[^:]+:)[^@]+@#\1[REDACTED]@#g' \
+                >> artifacts-security/compose-smoke-failure.log || true
+              exit "$status"
+            fi
+          }
+          trap capture_migrate_failure ERR
+          rendered="$("${compose[@]}" config --format json)"
+          printf '%s' "$rendered" | python -c 'import json,sys; services=json.load(sys.stdin)["services"]; assert not services["db"].get("ports"), "database must remain private"; assert not services["backend"].get("ports"), "backend must remain private"; print("Database and backend have no host-published ports")'
+          "${compose[@]}" up --detach --wait --wait-timeout 180 db backend frontend
+          migration="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py alembic current)"
+          grep -F '0014_egg_classification_reversal' <<< "$migration"
+          temporary_password="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'CI Synthetic Administrator' | sed -n '/temporal:/s/^[^:]*: //p')"
+          test -n "$temporary_password"
+          "${compose[@]}" exec -T backend python - "$temporary_password" <<'PY'
+          import http.cookiejar
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          base = "http://127.0.0.1:8000"
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+          def request(path, *, method="GET", payload=None, csrf=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {"Content-Type": "application/json"} if data is not None else {}
+              if csrf is not None:
+                  headers["X-CSRF-Token"] = csrf
+              req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+              try:
+                  return opener.open(req, timeout=10)
+              except urllib.error.HTTPError as error:
+                  raise AssertionError(f"{method} {path} returned HTTP {error.code}") from None
+
+          ready = request("/health/ready")
+          assert json.load(ready)["status"] == "ready"
+          initial_password = sys.argv[1]
+          login = request("/api/v1/auth/login", method="POST", payload={"identity": "initial.admin", "password": initial_password})
+          assert json.load(login)["must_change_password"] is True
+          changed = request("/api/v1/auth/change-password", method="POST", payload={"current_password": initial_password, "new_password": "CI-Synthetic-New-Password-2026!"}, csrf=login.headers["X-CSRF-Token"])
+          assert json.load(changed)["must_change_password"] is False
+          assert request("/api/v1/auth/logout", method="POST", csrf=changed.headers["X-CSRF-Token"]).status == 204
+          logged_in = request("/api/v1/auth/login", method="POST", payload={"identity": "initial.admin", "password": "CI-Synthetic-New-Password-2026!"})
+          assert json.load(logged_in)["username"] == "initial.admin"
+          current = request("/api/v1/auth/me")
+          assert json.load(current)["email"] == "initial.admin@example.test"
+          assert request("/api/v1/auth/logout", method="POST", csrf=logged_in.headers["X-CSRF-Token"]).status == 204
+          try:
+              opener.open(base + "/api/v1/auth/me", timeout=10)
+          except urllib.error.HTTPError as error:
+              assert error.code == 401
+          else:
+              raise AssertionError("session remained valid after logout")
+          print("Readiness, migration, synthetic bootstrap, password change, login, session and logout verified")
+          PY
+          printf 'commit=%s\ncompose_smoke=passed migration=0014_egg_classification_reversal\n' "$GITHUB_SHA" > artifacts-security/compose-smoke-summary.txt
+      - name: Clean isolated Compose application
+        if: always()
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
+          rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key
+      - name: Preserve synthetic Compose smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-compose-smoke-evidence
+          path: |
+            artifacts-security/compose-smoke-summary.txt
+            artifacts-security/compose-smoke-failure.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Run encrypted backup and isolated restore
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-restore-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p secrets artifacts-security .ci-restic
+          chmod 0777 .ci-restic
+          postgres_password="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          session_key="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          restic_password="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export RESTORE_TARGET_DATABASE_NAME="avicola_restore_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          source_database_url="postgresql+psycopg://avicola:${postgres_password}@db:5432/avicola_pro"
+          restore_target_database_url="postgresql+psycopg://avicola:${postgres_password}@restore-db:5432/${RESTORE_TARGET_DATABASE_NAME}"
+          test "$source_database_url" != "$restore_target_database_url"
+          printf '%s' "$postgres_password" > secrets/postgres_password
+          printf '%s' "$source_database_url" > secrets/database_url
+          printf '%s' "$session_key" > secrets/session_hmac_key
+          printf '%s' /tmp/restic > secrets/restic_repository
+          printf '%s' "$restic_password" > secrets/restic_password
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          sed -i \
+            -e 's#^BACKEND_IMAGE_REF=.*#BACKEND_IMAGE_REF=avicola-pro-backend:ci#' \
+            -e 's#^FRONTEND_IMAGE_REF=.*#FRONTEND_IMAGE_REF=avicola-pro-frontend:ci#' \
+            -e 's#^BACKUP_IMAGE_REF=.*#BACKUP_IMAGE_REF=avicola-pro-backup:ci#' \
+            deploy/compose/.env.production
+          compose=(docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production)
+          "${compose[@]}" up --detach --wait --wait-timeout 180 db backend restore-db
+          bootstrap_output="$("${compose[@]}" exec -T backend python /app/entrypoints/backend.py avicola-pro bootstrap-admin --username initial.admin --email initial.admin@example.test --name 'Synthetic Backup Administrator' 2>/dev/null)"
+          temporary_password="$(sed -n '/temporal:/s/^[^:]*: //p' <<< "$bootstrap_output")"
+          test -n "$temporary_password"
+          unset temporary_password bootstrap_output
+          "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/python3 backup -m deploy.backup.initialize_repository
+          backup_output="$("${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" backup)"
+          grep -F 'status=repository-verified' <<< "$backup_output"
+          snapshot_id="$(sed -n 's/^snapshot_id=\([^ ]*\).*/\1/p' <<< "$backup_output")"
+          test "${#snapshot_id}" -eq 64
+          printf '%s' "$restore_target_database_url" > secrets/restore_target_database_url
+          chmod 0444 secrets/restore_target_database_url
+          restore_output="$("${compose[@]}" --profile operations run --rm --no-deps \
+            --volume "$PWD/.ci-restic:/tmp/restic" \
+            --volume "$PWD/secrets/restore_target_database_url:/run/secrets/restore_target_database_url:ro" \
+            --env RESTORE_TARGET_DATABASE_URL_FILE=/run/secrets/restore_target_database_url \
+            --env RESTORE_TARGET_DATABASE_NAME="$RESTORE_TARGET_DATABASE_NAME" \
+            --env RESTORE_SNAPSHOT_ID="$snapshot_id" \
+            --entrypoint /usr/bin/python3 backup -m deploy.backup.restore)"
+          grep -F 'Restore reconciliation passed (9 checks)' <<< "$restore_output"
+          grep -F 'restore_status=verified' <<< "$restore_output"
+          printf '%s\n%s\n%s\n' "commit=$GITHUB_SHA" "$backup_output" "$restore_output" > artifacts-security/backup-restore-summary.txt
+          docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/find avicola-pro-backup:ci /tmp/restic -mindepth 1 -exec /bin/chmod a+rwX {} +
+          cp -R .ci-restic .ci-restic-corrupt
+          python -c 'from pathlib import Path; import sys; files=[path for path in Path(sys.argv[1], "data").rglob("*") if path.is_file()]; assert files; path=files[0]; stream=path.open("r+b"); original=stream.read(1); stream.seek(0); stream.write(bytes([original[0] ^ 255])); stream.close()' .ci-restic-corrupt
+          printf '%s' 'intentionally-incorrect-synthetic-restic-key' > secrets/restic_wrong_password
+          chmod 0444 secrets/restic_wrong_password
+          if "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic:/tmp/restic" --volume "$PWD/secrets/restic_wrong_password:/run/secrets/restic_wrong_password:ro" --env RESTIC_PASSWORD_FILE=/run/secrets/restic_wrong_password --entrypoint /usr/local/bin/restic backup check > artifacts-security/wrong-key-check.log 2>&1; then
+            echo 'Restic accepted an incorrect synthetic key' >&2
+            exit 1
+          fi
+          if "${compose[@]}" --profile operations run --rm --no-deps --volume "$PWD/.ci-restic-corrupt:/tmp/restic" backup check --read-data > artifacts-security/corrupt-repository-check.log 2>&1; then
+            echo 'Restic accepted a corrupted synthetic repository' >&2
+            exit 1
+          fi
+          printf '%s\n' 'Negative checks: wrong key rejected; corrupted repository rejected.' >> artifacts-security/backup-restore-summary.txt
+      - name: Clean synthetic backup resources
+        if: always()
+        shell: bash
+        env:
+          COMPOSE_PROJECT_NAME: avicola-restore-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --file deploy/compose/compose.production.yml --file deploy/compose/compose.ci.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production down --volumes --remove-orphans || true
+          rm -f deploy/compose/.env.production secrets/postgres_password secrets/database_url secrets/session_hmac_key secrets/restic_repository secrets/restic_password secrets/restore_target_database_url secrets/restic_wrong_password
+          if [ -d .ci-restic ]; then
+            docker run --rm --user 10002:10002 --volume "$PWD/.ci-restic:/tmp/restic" --entrypoint /usr/bin/find avicola-pro-backup:ci /tmp/restic -mindepth 1 -exec /bin/chmod a+rwX {} + || true
+          fi
+          rm -rf .ci-restic .ci-restic-corrupt
+      - name: Preserve synthetic backup and restore evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-backup-restore-evidence
+          path: artifacts-security/*backup-restore*.txt
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Preserve machine-readable image scans
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-security-sarif
+          path: trivy-*.sarif
+          if-no-files-found: ignore
+      - name: Summarize runtime image findings
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          def values(value, *wanted):
+              found = []
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      normalized = key.casefold().replace("_", "")
+                      if any(term in normalized for term in wanted) and isinstance(child, (str, int, float)):
+                          found.append(str(child))
+                      else:
+                          found.extend(values(child, *wanted))
+              elif isinstance(value, list):
+                  for child in value:
+                      found.extend(values(child, *wanted))
+              return list(dict.fromkeys(item for item in found if item))
+
+          reports = sorted(Path(".").glob("trivy-*.sarif"))
+          if not reports:
+              print("No Trivy SARIF report was produced; the image-scan gate will report scan failures.")
+          for report in reports:
+              print(f"::group::Image security findings: {report.name}")
+              try:
+                  document = json.loads(report.read_text(encoding="utf-8"))
+                  results = [result for run in document.get("runs", []) for result in run.get("results", [])]
+                  if not results:
+                      print("No HIGH/CRITICAL findings recorded in this SARIF report.")
+                  for result in results:
+                      properties = result.get("properties", {})
+                      package = values(properties, "pkgname", "packagename", "package")
+                      installed = values(properties, "installedversion", "currentversion")
+                      fixed = values(properties, "fixedversion", "patchedversion")
+                      targets = [
+                          location.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "")
+                          for location in result.get("locations", [])
+                      ]
+                      message = result.get("message", {}).get("text", "").replace("\n", " ")
+                      package_match = re.search(r"Package:\s*(.*?)\s+Installed Version:", message)
+                      installed_match = re.search(r"Installed Version:\s*(.*?)\s+Vulnerability", message)
+                      fixed_match = re.search(r"Fixed Version:\s*(.*?)\s+Link:", message)
+                      severity_match = re.search(r"Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN)", message, re.IGNORECASE)
+                      if not package and package_match:
+                          package = [package_match.group(1).strip()]
+                      if not installed and installed_match:
+                          installed = [installed_match.group(1).strip()]
+                      if not fixed and fixed_match and fixed_match.group(1).strip():
+                          fixed = [fixed_match.group(1).strip()]
+                      severity = severity_match.group(1).upper() if severity_match else (
+                          f"{result.get('level', 'unknown')} / {properties.get('security-severity', 'n/a')}"
+                      )
+                      detail = "n/a" if package_match and installed_match else message[:500] or "n/a"
+                      print(
+                          " | ".join(
+                              (
+                                  f"rule={result.get('ruleId', 'unknown')}",
+                                  f"severity={severity}",
+                                  f"package={', '.join(package) or 'see SARIF message'}",
+                                  f"installed={', '.join(installed) or 'n/a'}",
+                                  f"fixed={', '.join(fixed) or 'not listed'}",
+                                  f"target={', '.join(target for target in targets if target) or 'n/a'}",
+                                  f"message={detail}",
+                              )
+                          )
+                      )
+              except (OSError, json.JSONDecodeError, AttributeError, TypeError) as error:
+                  print(f"Unable to summarize {report.name}: {type(error).__name__}; full SARIF remains available as an artifact.")
+              print("::endgroup::")
+          PY
+      - name: Enforce all image security scans
+        if: always()
+        shell: bash
+        env:
+          BACKEND_SCAN_OUTCOME: ${{ steps.backend_image_scan.outcome }}
+          FRONTEND_SCAN_OUTCOME: ${{ steps.frontend_image_scan.outcome }}
+          BACKUP_SCAN_OUTCOME: ${{ steps.backup_image_scan.outcome }}
+        run: |
+          if [[ "$BACKEND_SCAN_OUTCOME" != success || "$FRONTEND_SCAN_OUTCOME" != success || "$BACKUP_SCAN_OUTCOME" != success ]]; then
+            echo "At least one runtime image has a high/critical finding or scan error. Review all uploaded SARIF reports."
+            exit 1
+          fi
+      - name: Export scanned image archives
+        run: |
+          mkdir -p release-inputs/images
+          docker save --output release-inputs/images/avicola-pro-backend.tar avicola-pro-backend:ci
+          docker save --output release-inputs/images/avicola-pro-frontend.tar avicola-pro-frontend:ci
+          docker save --output release-inputs/images/avicola-pro-backup.tar avicola-pro-backup:ci
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          names = ("backend", "frontend", "backup")
+          metadata = {
+              name: subprocess.check_output(
+                  ["docker", "image", "inspect", f"avicola-pro-{name}:ci", "--format", "{{{{.Id}}}}"],
+                  text=True,
+              ).strip()
+              for name in names
+          }
+          Path("release-inputs/image-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+          PY
+      - name: Preserve runtime image archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-image-archives
+          path: release-inputs
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  deployment-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render Compose with synthetic secrets and enforce private topology
+        shell: bash
+        run: |
+          mkdir -p secrets
+          printf '%s' 'synthetic-postgres-password' > secrets/postgres_password
+          printf '%s' 'postgresql+psycopg://avicola:synthetic-postgres-password@db:5432/avicola_pro' > secrets/database_url
+          printf '%s' 'synthetic-session-key-not-for-production' > secrets/session_hmac_key
+          printf '%s' 'https://backup.example.invalid/synthetic-repository' > secrets/restic_repository
+          printf '%s' 'synthetic-restic-password-not-for-production' > secrets/restic_password
+          cp deploy/compose/.env.production.example deploy/compose/.env.production
+          docker compose --profile operations --file deploy/compose/compose.production.yml --file deploy/backup/compose.backup.yml --env-file deploy/compose/.env.production config --format json |
+          python -c 'import json,sys; c=json.load(sys.stdin); s=c["services"]; print("rendered top-level keys",sorted(c.keys()),"backup service keys",sorted(s.get("backup",{}).keys()),flush=True); exposed={n for n,v in s.items() if v.get("ports")}; assert exposed == {"proxy"}, exposed; assert "ports" not in s["db"]; assert "networks" in c, sorted(c.keys()); assert c["networks"]["data"].get("internal") is True; assert s["backend"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"; assert all("@sha256:" in s[n]["image"] for n in ("migrate","backend","frontend","backup")); assert "networks" in s["backup"], sorted(s["backup"].keys()); assert set(s["backup"]["networks"]) == {"data","backup-egress"}; assert "backup-egress" not in c["networks"] or not c["networks"]["backup-egress"].get("internal",False); print("Compose topology and immutable image refs verified")'
+          rm -f deploy/compose/.env.production
+
+  release-bundle:
+    if: github.event_name == 'push'
+    needs:
+      - windows-toolchains
+      - postgresql-integration
+      - dependency-security
+      - source-security
+      - deployment-images
+      - deployment-compose
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download scanned runtime image archives
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-image-archives
+          path: release-staging
+      - name: Download image scan reports
+        uses: actions/download-artifact@v4
+        with:
+          name: image-security-sarif
+          path: release-staging/reports/image-security
+      - name: Normalize image scan report names
+        run: |
+          mv release-staging/reports/image-security/trivy-backend.sarif release-staging/reports/image-security/backend.sarif
+          mv release-staging/reports/image-security/trivy-frontend.sarif release-staging/reports/image-security/frontend.sarif
+          mv release-staging/reports/image-security/trivy-backup.sarif release-staging/reports/image-security/backup.sarif
+      - name: Download dependency audit reports
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-security-reports
+          path: release-staging/reports/dependency-security
+      - name: Download source security report
+        uses: actions/download-artifact@v4
+        with:
+          name: source-security-sarif
+          path: release-staging/reports/source-security
+      - name: Download authenticated Compose smoke evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-compose-smoke-evidence
+          path: release-staging/reports
+      - name: Download synthetic backup restore evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-backup-restore-evidence
+          path: release-staging/reports
+      - name: Generate CycloneDX SBOMs from the exact scanned image archives
+        run: mkdir -p release-staging/sbom
+      - name: Generate backend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-backend.tar
+          format: cyclonedx
+          output: release-staging/sbom/backend.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Generate frontend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-frontend.tar
+          format: cyclonedx
+          output: release-staging/sbom/frontend.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Generate backup SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          input: release-staging/images/avicola-pro-backup.tar
+          format: cyclonedx
+          output: release-staging/sbom/backup.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Build checksummed release evidence bundle
+        run: >-
+          python scripts/create_release_bundle.py
+          --root release-staging
+          --output avicola-pro-release-bundle.tar
+          --commit "$GITHUB_SHA"
+          --source-ref "$GITHUB_REF"
+          --source-event "$GITHUB_EVENT_NAME"
+          --workflow-run-id "$GITHUB_RUN_ID"
+          --workflow-run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Attest release bundle provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: avicola-pro-release-bundle.tar
+      - name: Preserve release bundle for user-controlled download
+        uses: actions/upload-artifact@v4
+        with:
+          name: avicola-pro-release-bundle
+          path: avicola-pro-release-bundle.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  release-bundle-verify:
+    if: github.event_name == 'push'
+    needs: [release-bundle]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: avicola-pro-release-bundle
+      - name: Verify exact bundle provenance and reject tampering
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/verify_release_attestation.py \
+            --bundle avicola-pro-release-bundle.tar \
+            --expected-commit "$GITHUB_SHA" \
+            --expected-source-ref "$GITHUB_REF" > attestation-verification.json
+          cp avicola-pro-release-bundle.tar avicola-pro-release-bundle-tampered.tar
+          printf 'tamper' >> avicola-pro-release-bundle-tampered.tar
+          if gh attestation verify avicola-pro-release-bundle-tampered.tar \
+            --repo Rubio120/AVICOLA_PRO \
+            --signer-workflow Rubio120/AVICOLA_PRO/.github/workflows/ci.yml \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json > /dev/null 2>&1; then
+            echo "Attestation accepted a modified bundle" >&2
+            exit 1
+          fi
+

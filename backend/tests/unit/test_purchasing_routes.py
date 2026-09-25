@@ -1,0 +1,122 @@
+from datetime import date
+from decimal import Decimal
+from types import SimpleNamespace
+from typing import cast
+from uuid import uuid4
+
+import pytest
+from fastapi.routing import APIRoute
+from pydantic import ValidationError
+from starlette.requests import Request
+
+from avicola_pro.modules.purchasing.api.routes import OrderPayload, PaymentPayload, build_purchasing_router
+from avicola_pro.modules.purchasing.application.service import purchasing_service
+from avicola_pro.modules.purchasing.domain.rules import PurchaseConflictError
+from avicola_pro.shared.api.errors import ConflictError
+from avicola_pro.shared.infrastructure.database import DatabaseResources
+
+
+def test_order_payload_rejects_unknown_server_fields() -> None:
+    with pytest.raises(ValidationError):
+        OrderPayload(supplier_id=uuid4(), order_date=date.today(), lines=[], is_approved=True)  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
+async def test_create_order_endpoint_persists_and_audits() -> None:
+    class Session:
+        def add(self, _: object) -> None:
+            return None
+
+        async def flush(self) -> None:
+            return None
+
+        def begin(self) -> "Session":
+            return self
+
+        async def __aenter__(self) -> "Session":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+    class Factory:
+        def __call__(self) -> Session:
+            return Session()
+
+    audit = SimpleNamespace(add=lambda *_: None)
+    router = build_purchasing_router(
+        object(),
+        object(),
+        cast(DatabaseResources, SimpleNamespace(session_factory=Factory())),
+        audit,
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/api/v1/purchasing/orders"
+        and "POST" in (route.methods or set())
+    )
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "query_string": b""})
+    request.state.correlation_id = str(uuid4())
+    payload = OrderPayload(
+        supplier_id=uuid4(),
+        order_date=date.today(),
+        lines=[{"product_id": uuid4(), "quantity": Decimal("2"), "unit_price": Decimal("10")}],
+    )
+    result = await route.endpoint(payload, request, SimpleNamespace(id=uuid4(), username="operator"), object())
+    assert result.status == "DRAFT"
+
+
+@pytest.mark.asyncio
+async def test_payment_idempotency_mismatch_is_returned_as_http_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Session:
+        def begin(self) -> "Session":
+            return self
+
+        async def __aenter__(self) -> "Session":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+    class Factory:
+        def __call__(self) -> Session:
+            return Session()
+
+    async def reject_mismatch(*_: object, **__: object) -> None:
+        raise PurchaseConflictError("idempotency key reused with different payment data")
+
+    monkeypatch.setattr(purchasing_service, "create_payment", reject_mismatch)
+    router = build_purchasing_router(
+        object(),
+        object(),
+        cast(DatabaseResources, SimpleNamespace(session_factory=Factory())),
+        SimpleNamespace(add=lambda *_: None),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/api/v1/purchasing/payments"
+        and "POST" in (route.methods or set())
+    )
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "query_string": b""})
+    request.state.correlation_id = str(uuid4())
+    payload = PaymentPayload(
+        supplier_id=uuid4(),
+        amount=Decimal("10"),
+        payment_date=date.today(),
+        payment_method_code="cash",
+        idempotency_key="payment-key",
+        allocations=[{"accounts_payable_id": uuid4(), "amount": Decimal("10")}],
+    )
+
+    with pytest.raises(ConflictError) as error:
+        await route.endpoint(payload, request, SimpleNamespace(id=uuid4(), username="operator"), object())
+
+    assert error.value.status_code == 409

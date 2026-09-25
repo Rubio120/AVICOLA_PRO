@@ -1,0 +1,581 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import subprocess
+import sys
+from pathlib import Path
+from uuid import uuid4
+
+import psycopg
+import pytest
+from psycopg import errors
+from sqlalchemy import create_engine, inspect
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _database_url() -> str:
+    try:
+        return os.environ["AVICOLA_TEST_DATABASE_URL"]
+    except KeyError as exc:
+        pytest.fail("AVICOLA_TEST_DATABASE_URL must reference a real empty PostgreSQL database")
+        raise AssertionError from exc
+
+
+def _run_alembic(*args: str) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["AVICOLA_DATABASE_URL"] = _database_url()
+    environment["AVICOLA_SESSION_HMAC_KEY"] = "jUrUWz89-ZPO0xh7ppVRm50Pt-un53S_NSfNCACPXaM"
+    return subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=BACKEND_ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+EXPECTED_TABLES = {
+    "alembic_version",
+    "audit_events",
+    "permissions",
+    "role_permissions",
+    "roles",
+    "security_events",
+    "sessions",
+    "user_roles",
+    "users",
+    "company_profile",
+    "currencies",
+    "units_of_measure",
+    "tax_rates",
+    "stamps",
+    "document_sequences",
+    "payment_methods",
+    "customers",
+    "suppliers",
+    "product_categories",
+    "products",
+    "farms",
+    "houses",
+    "warehouses",
+    "inventory_lots",
+    "inventory_documents",
+    "inventory_document_lines",
+    "inventory_movements",
+    "inventory_balances",
+    "inventory_cost_variances",
+    "egg_categories",
+    "egg_presentation_conversions",
+    "egg_production_classifications",
+    "egg_production_allocations",
+    "flocks",
+    "flock_house_assignments",
+    "flock_balances",
+    "bird_movement_events",
+    "mortality_events",
+    "bird_adjustment_events",
+    "flock_daily_records",
+    "feed_consumption",
+    "egg_production_events",
+    "purchase_orders",
+    "purchase_order_lines",
+    "purchase_receipts",
+    "purchase_receipt_lines",
+    "supplier_documents",
+    "supplier_document_lines",
+    "supplier_document_receipts",
+    "accounts_payable",
+    "supplier_payments",
+    "supplier_payment_allocations",
+    "sales_orders",
+    "sales_order_lines",
+    "sales_deliveries",
+    "sales_delivery_lines",
+    "commercial_documents",
+    "commercial_document_lines",
+    "commercial_document_relations",
+    "accounts_receivable",
+    "customer_payments",
+    "customer_payment_allocations",
+    "cash_accounts",
+    "cash_sessions",
+    "cash_movements",
+    "cash_transfers",
+    "cost_centers",
+    "cost_events",
+    "cost_allocations",
+    "cost_runs",
+    "cost_run_snapshots",
+    "profitability_snapshots",
+}
+
+
+def _reset_schema() -> None:
+    _run_alembic("downgrade", "base")
+    _run_alembic("upgrade", "head")
+
+
+def _classification_event_has_unique_constraint() -> bool:
+    engine = create_engine(_database_url())
+    try:
+        constraints = inspect(engine).get_unique_constraints("egg_production_classifications")
+        return any(set(item["column_names"]) == {"production_event_id"} for item in constraints)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def migrated_database() -> None:
+    _reset_schema()
+
+
+@pytest.mark.integration
+def test_identity_migration_round_trip_on_real_postgresql() -> None:
+    current = _run_alembic("current")
+
+    assert current.returncode == 0
+
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select version()")
+        version = cursor.fetchone()
+        cursor.execute("select table_name from information_schema.tables where table_schema = 'public'")
+        tables = {row[0] for row in cursor.fetchall()}
+
+    assert version is not None and version[0].startswith("PostgreSQL 16")
+    assert tables == EXPECTED_TABLES
+
+    _run_alembic("downgrade", "0001_baseline")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select table_name from information_schema.tables where table_schema = 'public'")
+        assert {row[0] for row in cursor.fetchall()} == {"alembic_version"}
+    _run_alembic("upgrade", "head")
+
+
+@pytest.mark.integration
+def test_inventory_schema_has_reconciliation_indexes_and_append_only_trigger() -> None:
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select indexname from pg_indexes where schemaname = 'public'")
+        indexes = {row[0] for row in cursor.fetchall()}
+        assert {
+            "ix_inventory_movements_bucket_occurred",
+            "ix_inventory_movements_source",
+            "uq_inventory_movements_reversal",
+            "uq_inventory_balances_bucket",
+        } <= indexes
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid = 'inventory_movements'::regclass and not tgisinternal"
+        )
+        assert "trg_inventory_movements_append_only" in {row[0] for row in cursor.fetchall()}
+
+
+@pytest.mark.integration
+def test_egg_production_migration_upgrades_from_delivery_12_and_is_append_only() -> None:
+    _run_alembic("downgrade", "0010_costing")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select indexname from pg_indexes where schemaname = 'public' and tablename = 'egg_production_events'"
+        )
+        indexes = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid = 'egg_production_events'::regclass and not tgisinternal"
+        )
+        triggers = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select column_name, is_nullable from information_schema.columns "
+            "where table_schema = 'public' and table_name = 'egg_production_events'"
+        )
+        columns: dict[str, str] = dict(cursor.fetchall())
+
+    assert "ix_egg_production_flock_date" in indexes
+    assert "trg_egg_production_events_append_only" in triggers
+    assert columns["idempotency_key"] == "NO"
+    assert columns["actor_user_id"] == "NO"
+
+
+@pytest.mark.integration
+def test_egg_inventory_migration_is_immutable_and_adds_only_permissions() -> None:
+    _run_alembic("downgrade", "0011_egg_production")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select tgname from pg_trigger where tgrelid in "
+            "('egg_presentation_conversions'::regclass, 'egg_production_classifications'::regclass, "
+            "'egg_production_allocations'::regclass) and not tgisinternal"
+        )
+        triggers = {row[0] for row in cursor.fetchall()}
+        cursor.execute(
+            "select key from permissions where key like 'inventory.egg_%' or key = 'production.eggs.classify'"
+        )
+        permission_keys = {row[0] for row in cursor.fetchall()}
+        cursor.execute("select count(*) from egg_categories")
+        category_result = cursor.fetchone()
+        assert category_result is not None
+        category_count = category_result[0]
+
+    assert {
+        "trg_egg_presentation_conversions_append_only",
+        "trg_egg_production_classifications_append_only",
+        "trg_egg_production_allocations_append_only",
+    } <= triggers
+    assert permission_keys == {"inventory.egg_categories.manage", "production.eggs.classify"}
+    assert category_count == 0
+
+
+@pytest.mark.integration
+def test_sales_channel_migration_preserves_history_as_unclassified() -> None:
+    _run_alembic("downgrade", "0012_egg_inventory")
+    _run_alembic("upgrade", "head")
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "select table_name, column_name, is_nullable from information_schema.columns "
+            "where table_schema = 'public' and column_name = 'channel'"
+        )
+        channel_columns = {(table, column): nullable for table, column, nullable in cursor.fetchall()}
+        cursor.execute("select conname from pg_constraint where conname like '%channel_valid'")
+        constraints = {row[0] for row in cursor.fetchall()}
+
+    assert channel_columns == {
+        ("sales_orders", "channel"): "YES",
+        ("commercial_documents", "channel"): "YES",
+    }
+    assert any(name.endswith("sales_order_channel_valid") for name in constraints)
+    assert any(name.endswith("commercial_document_channel_valid") for name in constraints)
+
+
+@pytest.mark.integration
+def test_classification_reversal_migration_round_trips_from_0013() -> None:
+    _run_alembic("downgrade", "0013_sales_channel")
+    assert _classification_event_has_unique_constraint()
+
+    _run_alembic("upgrade", "head")
+    assert not _classification_event_has_unique_constraint()
+
+    _run_alembic("downgrade", "0013_sales_channel")
+    assert _classification_event_has_unique_constraint()
+
+    _run_alembic("upgrade", "head")
+    assert not _classification_event_has_unique_constraint()
+
+
+@pytest.mark.integration
+def test_seed_is_complete_idempotent_and_grants_only_administrator() -> None:
+    assert importlib.util.find_spec("avicola_pro.modules.identity.infrastructure.seed") is not None
+
+    from avicola_pro.modules.identity.infrastructure.seed import (
+        BASE_PERMISSION_KEYS,
+        BASE_ROLE_CODES,
+        seed_base_catalog,
+    )
+
+    engine = create_engine(_database_url())
+    with engine.begin() as sa_connection:
+        seed_base_catalog(sa_connection)
+        seed_base_catalog(sa_connection)
+    engine.dispose()
+
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select key from permissions")
+        permission_keys = {row[0] for row in cursor.fetchall()}
+        cursor.execute("select code, is_system from roles")
+        roles: dict[str, bool] = dict(cursor.fetchall())
+        role_codes = set(roles)
+        cursor.execute(
+            """
+            select r.code, count(rp.permission_id)
+            from roles r
+            left join role_permissions rp on rp.role_id = r.id
+            group by r.code
+            """
+        )
+        grant_counts: dict[str, int] = dict(cursor.fetchall())
+        cursor.execute("select id from permissions union all select id from roles")
+        seeded_ids = [row[0] for row in cursor.fetchall()]
+        cursor.execute("select (select count(*) from users), (select count(*) from sessions)")
+        sensitive_seed_counts = cursor.fetchone()
+
+    assert permission_keys == set(BASE_PERMISSION_KEYS)
+    assert role_codes == set(BASE_ROLE_CODES)
+    assert all(roles.values())
+    assert grant_counts["administrator"] == len(BASE_PERMISSION_KEYS)
+    assert all(count == 0 for code, count in grant_counts.items() if code != "administrator")
+    assert seeded_ids and all(identifier.version == 7 for identifier in seeded_ids)
+    assert sensitive_seed_counts == (0, 0)
+
+
+@pytest.mark.integration
+def test_users_enforce_normalized_unique_identity_valid_state_and_restrictive_foreign_keys() -> None:
+    user_id = uuid4()
+    role_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            insert into users (id, username, email, display_name, password_hash)
+            values (%s, 'operator', 'operator@example.test', 'Operator', 'argon2id-hash')
+            """,
+            (user_id,),
+        )
+        cursor.execute(
+            """
+            insert into roles (id, code, name, is_system)
+            values (%s, 'temporary', 'Temporary', false)
+            """,
+            (role_id,),
+        )
+        cursor.execute("insert into user_roles (user_id, role_id) values (%s, %s)", (user_id, role_id))
+        db_connection.commit()
+
+        with pytest.raises(errors.UniqueViolation):
+            cursor.execute(
+                """
+                insert into users (id, username, email, display_name, password_hash)
+                values (%s, 'operator', 'other@example.test', 'Duplicate', 'argon2id-hash')
+                """,
+                (uuid4(),),
+            )
+        db_connection.rollback()
+
+        with pytest.raises(errors.CheckViolation):
+            cursor.execute(
+                """
+                insert into users (id, username, email, display_name, password_hash)
+                values (%s, 'MixedCase', 'mixed@example.test', 'Mixed', 'argon2id-hash')
+                """,
+                (uuid4(),),
+            )
+        db_connection.rollback()
+
+        with pytest.raises(errors.CheckViolation):
+            cursor.execute(
+                """
+                insert into users (id, username, email, display_name, password_hash, status)
+                values (%s, 'invalid-state', 'state@example.test', 'State', 'argon2id-hash', 'UNKNOWN')
+                """,
+                (uuid4(),),
+            )
+        db_connection.rollback()
+
+        with pytest.raises(errors.ForeignKeyViolation):
+            cursor.execute("delete from users where id = %s", (user_id,))
+        db_connection.rollback()
+
+
+@pytest.mark.integration
+def test_sessions_store_only_hashes_and_enforce_expiration_order() -> None:
+    columns_forbidden_from_sessions = {"token", "csrf_token", "password", "secret"}
+    user_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            select column_name
+            from information_schema.columns
+            where table_schema = 'public' and table_name = 'sessions'
+            """
+        )
+        session_columns = {row[0] for row in cursor.fetchall()}
+        assert columns_forbidden_from_sessions.isdisjoint(session_columns)
+        assert {"token_hash", "csrf_hash", "family_id", "idle_expires_at", "absolute_expires_at"} <= session_columns
+
+        cursor.execute(
+            """
+            insert into users (id, username, email, display_name, password_hash)
+            values (%s, 'session-user', 'session@example.test', 'Session', 'argon2id-hash')
+            """,
+            (user_id,),
+        )
+        with pytest.raises(errors.CheckViolation):
+            cursor.execute(
+                """
+                insert into sessions (
+                    id, user_id, family_id, token_hash, csrf_hash,
+                    idle_expires_at, absolute_expires_at
+                ) values (
+                    %s, %s, %s, %s, %s,
+                    now() - interval '1 minute', now() + interval '1 hour'
+                )
+                """,
+                (uuid4(), user_id, uuid4(), bytes(32), bytes(range(32))),
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("table_name", ["audit_events", "security_events"])
+@pytest.mark.parametrize("operation", ["update", "delete"])
+def test_event_ledgers_reject_update_and_delete_via_direct_sql(table_name: str, operation: str) -> None:
+    event_id = uuid4()
+    correlation_id = uuid4()
+    statements = {
+        ("audit_events", "update"): "update audit_events set outcome = 'FAILURE' where id = %s",
+        ("audit_events", "delete"): "delete from audit_events where id = %s",
+        ("security_events", "update"): "update security_events set outcome = 'FAILURE' where id = %s",
+        ("security_events", "delete"): "delete from security_events where id = %s",
+    }
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        if table_name == "audit_events":
+            cursor.execute(
+                """
+                insert into audit_events (id, action, resource_type, outcome, correlation_id)
+                values (%s, 'users.create', 'user', 'SUCCESS', %s)
+                """,
+                (event_id, correlation_id),
+            )
+        else:
+            cursor.execute(
+                """
+                insert into security_events (id, event_type, outcome, correlation_id)
+                values (%s, 'login.failed', 'FAILURE', %s)
+                """,
+                (event_id, correlation_id),
+            )
+        db_connection.commit()
+
+        with pytest.raises(errors.RaiseException, match="append-only"):
+            cursor.execute(statements[(table_name, operation)], (event_id,))
+
+
+@pytest.mark.integration
+def test_identity_and_event_indexes_cover_operational_queries() -> None:
+    expected_indexes = {
+        "ix_audit_events_actor_created_at",
+        "ix_audit_events_correlation_id",
+        "ix_audit_events_resource_created_at",
+        "ix_security_events_actor_created_at",
+        "ix_security_events_correlation_id",
+        "ix_security_events_type_created_at",
+        "ix_sessions_absolute_expires_at",
+        "ix_sessions_family_active",
+        "ix_sessions_idle_expires_at",
+        "ix_sessions_user_active",
+        "uq_permissions_key_ci",
+        "uq_roles_code_ci",
+        "uq_users_email_ci",
+        "uq_users_username_ci",
+    }
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute("select indexname from pg_indexes where schemaname = 'public'")
+        actual_indexes = {row[0] for row in cursor.fetchall()}
+
+    assert expected_indexes <= actual_indexes
+
+
+@pytest.mark.integration
+def test_event_payloads_accept_only_json_objects() -> None:
+    with (
+        psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection,
+        db_connection.cursor() as cursor,
+        pytest.raises(errors.CheckViolation),
+    ):
+        cursor.execute(
+            """
+            insert into security_events (id, event_type, outcome, correlation_id, metadata)
+            values (%s, 'login.failed', 'FAILURE', %s, '["not", "an", "object"]'::jsonb)
+            """,
+            (uuid4(), uuid4()),
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "statement",
+    [
+        """
+        insert into audit_events (id, action, resource_type, outcome, correlation_id, after_data)
+        values (%s, 'users.update', 'user', 'FAILURE', %s, '{"password": "sensitive"}'::jsonb)
+        """,
+        """
+        insert into security_events (id, event_type, outcome, correlation_id, metadata)
+        values (%s, 'login.failed', 'FAILURE', %s, '{"password": "sensitive"}'::jsonb)
+        """,
+    ],
+)
+def test_event_payloads_reject_keys_outside_allowlist(statement: str) -> None:
+    with (
+        psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection,
+        db_connection.cursor() as cursor,
+        pytest.raises(errors.CheckViolation),
+    ):
+        cursor.execute(statement, (uuid4(), uuid4()))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "statement",
+    [
+        """
+        insert into audit_events (id, action, resource_type, outcome, correlation_id, after_data)
+        values (
+            %s, 'users.update', 'user', 'FAILURE', %s,
+            '{"username": {"password": "sensitive"}}'::jsonb
+        )
+        """,
+        """
+        insert into audit_events (id, action, resource_type, outcome, correlation_id, before_data)
+        values (%s, 'roles.update', 'role', 'FAILURE', %s, '{"role_id": ["first", "second"]}'::jsonb)
+        """,
+        """
+        insert into security_events (id, event_type, outcome, correlation_id, metadata)
+        values (%s, 'login.failed', 'FAILURE', %s, '{"reason": {"token": "sensitive"}}'::jsonb)
+        """,
+        """
+        insert into security_events (id, event_type, outcome, correlation_id, metadata)
+        values (%s, 'authorization.denied', 'DENIED', %s, '{"resource_id": ["first", "second"]}'::jsonb)
+        """,
+    ],
+)
+def test_event_payloads_reject_objects_and_arrays_under_allowlisted_keys(statement: str) -> None:
+    with (
+        psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection,
+        db_connection.cursor() as cursor,
+        pytest.raises(errors.CheckViolation),
+    ):
+        cursor.execute(statement, (uuid4(), uuid4()))
+
+
+@pytest.mark.integration
+def test_treasury_enforces_one_open_session_and_append_only_movements() -> None:
+    account_id = uuid4()
+    session_id = uuid4()
+    user_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            insert into users (id, username, email, display_name, password_hash)
+            values (%s, 'cash-user', 'cash@example.test', 'Cash', 'hash')
+            """,
+            (user_id,),
+        )
+        cursor.execute("insert into cash_accounts (id, code, name) values (%s, 'MAIN', 'Main cash')", (account_id,))
+        cursor.execute(
+            "insert into cash_sessions (id, cash_account_id, opened_by, opening_balance) values (%s, %s, %s, 100)",
+            (session_id, account_id, user_id),
+        )
+        with pytest.raises(errors.UniqueViolation):
+            cursor.execute(
+                "insert into cash_sessions (id, cash_account_id, opened_by, opening_balance) values (%s, %s, %s, 0)",
+                (uuid4(), account_id, user_id),
+            )
+        db_connection.rollback()
+
+
+@pytest.mark.integration
+def test_costing_ledgers_and_closed_runs_are_append_only() -> None:
+    event_id = uuid4()
+    run_id = uuid4()
+    with psycopg.connect(_database_url().replace("+psycopg", "")) as db_connection, db_connection.cursor() as cursor:
+        cursor.execute(
+            "insert into cost_events (id, event_type, source_type, source_id, effective_date, amount) "
+            "values (%s, 'FEED', 'source', %s, current_date, 10)",
+            (event_id, uuid4()),
+        )
+        cursor.execute(
+            "insert into cost_runs (id, run_date, version, status) values (%s, current_date, 1, 'CLOSED')", (run_id,)
+        )
+        db_connection.commit()
+        with pytest.raises(errors.RaiseException, match="append-only"):
+            cursor.execute("update cost_events set amount = 11 where id = %s", (event_id,))
+        db_connection.rollback()
+        with pytest.raises(errors.RaiseException, match="closed cost runs"):
+            cursor.execute("update cost_runs set version = 2 where id = %s", (run_id,))

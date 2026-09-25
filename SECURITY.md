@@ -131,3 +131,5 @@ No se guardan contraseñas, tokens, secretos, certificados, datos de tarjeta ni 
 - Restore drill aislado antes del piloto y periódicamente después.
 - Restauraciones y accesos quedan auditados.
 - El gate de piloto exige restaurar un artefacto cifrado obtenido de la copia externa, probar clave errónea/corrupción y conservar evidencia fechada aprobada.
+
+La herramienta `deploy/backup/` usa `pg_dump` custom, Restic con repositorio/clave en archivos montados, IDs completos y restore solo a una base vacía `avicola_restore_*` distinta de la fuente. El servicio backup es el único que comparte red interna de PostgreSQL y una red de salida controlada. Un repositorio local sintético no demuestra aceptación off-host. La auditoría tiene restricciones validadas de forma y controles append-only de aplicación, pero no una cadena criptográfica de hashes; no describirla como tamper-evident.
