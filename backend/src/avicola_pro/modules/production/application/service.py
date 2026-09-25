@@ -434,7 +434,7 @@ class ProductionService:
                 warehouse_id=warehouse_id,
                 source_type="egg_production",
                 source_id=event.id,
-                reason="Clasificación de producción de huevos",
+                reason="Clasificaci�n de producci�n de huevos",
             )
             session.add(inventory_document)
             await session.flush()
@@ -511,6 +511,48 @@ class ProductionService:
             return await inventory_service.reverse(session, classification.inventory_document_id, actor_user_id, reason)
         except InventoryConflictError as exc:
             raise ProductionConflictError(str(exc)) from exc
+
+    async def list_egg_classifications(self, session: AsyncSession, production_event_id: UUID) -> list[dict[str, Any]]:
+        rows = await session.execute(
+            select(
+                EggProductionClassification,
+                InventoryDocument,
+                EggProductionAllocation.category_id,
+                EggCategory.code,
+                EggProductionAllocation.egg_count,
+            )
+            .outerjoin(
+                InventoryDocument,
+                InventoryDocument.id == EggProductionClassification.inventory_document_id,
+            )
+            .outerjoin(
+                EggProductionAllocation,
+                EggProductionAllocation.classification_id == EggProductionClassification.id,
+            )
+            .outerjoin(EggCategory, EggCategory.id == EggProductionAllocation.category_id)
+            .where(EggProductionClassification.production_event_id == production_event_id)
+            .order_by(
+                EggProductionClassification.created_at,
+                EggProductionClassification.id,
+                EggProductionAllocation.category_id,
+            )
+        )
+        history: dict[UUID, dict[str, Any]] = {}
+        for classification, inventory_document, category_id, category_code, egg_count in rows.all():
+            item = history.setdefault(
+                classification.id,
+                {
+                    "id": classification.id,
+                    "warehouse_id": classification.warehouse_id,
+                    "inventory_status": inventory_document.status if inventory_document is not None else None,
+                    "allocations": [],
+                },
+            )
+            if category_id is not None:
+                item["allocations"].append(
+                    {"category_id": category_id, "category_code": category_code, "egg_count": egg_count}
+                )
+        return list(history.values())
 
     async def list_egg_production_options(self, session: AsyncSession, on_date: date) -> list[dict[str, Any]]:
         statement = (
@@ -601,3 +643,4 @@ class ProductionService:
 
 
 production_service = ProductionService()
+

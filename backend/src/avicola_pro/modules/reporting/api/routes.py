@@ -1,7 +1,7 @@
 # ruff: noqa: B008
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from importlib import import_module
 from typing import Any
 from uuid import UUID
@@ -18,6 +18,29 @@ class MetricResponse(BaseModel):
     unit: str
     available: bool
     reason: str | None
+    period: MetricPeriod
+
+
+class MetricPeriod(BaseModel):
+    date_from: date | None
+    date_to: date | None
+
+
+class DailyMortalityResponse(BaseModel):
+    occurred_on: date
+    deaths: str
+
+
+class ActiveFlockAgeResponse(BaseModel):
+    flock_code: str
+    days_since_entry: int
+    as_of: date
+
+
+class FeedConsumptionByHouseResponse(BaseModel):
+    house_code: str | None
+    unit_code: str
+    quantity: str
 
 
 class DashboardResponse(BaseModel):
@@ -31,6 +54,9 @@ class DashboardResponse(BaseModel):
     cash_balance: str
     confirmed_costs: str
     poultry_metrics: dict[str, MetricResponse]
+    daily_mortality: list[DailyMortalityResponse]
+    active_flock_ages: list[ActiveFlockAgeResponse]
+    feed_consumption_by_house: list[FeedConsumptionByHouseResponse]
 
 
 class ProfitabilityRow(BaseModel):
@@ -58,8 +84,9 @@ class CommercialSalesRow(BaseModel):
     net_revenue: str
 
 
-def dashboard_payload(values: dict[str, Any]) -> dict[str, Any]:
+def dashboard_payload(values: dict[str, Any], *, period: MetricPeriod) -> dict[str, Any]:
     payload: dict[str, Any] = {}
+    coverage_to = period.date_to or date.today()
     for key, value in values.items():
         if key == "poultry_metrics":
             payload[key] = {
@@ -68,11 +95,26 @@ def dashboard_payload(values: dict[str, Any]) -> dict[str, Any]:
                     "unit": metric.unit,
                     "available": metric.available,
                     "reason": metric.reason,
+                    "period": (
+                        MetricPeriod(
+                            date_from=coverage_to - timedelta(days=29),
+                            date_to=coverage_to,
+                        ).model_dump()
+                        if name == "stock_coverage"
+                        else period.model_dump()
+                    ),
                 }
                 for name, metric in value.items()
             }
         elif key == "sales_documents":
             payload[key] = value
+        elif key in {"daily_mortality", "active_flock_ages", "feed_consumption_by_house"}:
+            if key == "daily_mortality":
+                payload[key] = [{**item, "deaths": str(item["deaths"])} for item in value]
+            elif key == "feed_consumption_by_house":
+                payload[key] = [{**item, "quantity": str(item["quantity"])} for item in value]
+            else:
+                payload[key] = value
         else:
             payload[key] = str(value)
     return payload
@@ -118,6 +160,46 @@ def build_reporting_router(
 
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    def channel_filters(
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        channel: str | None = Query(default=None, pattern=r"^(WHOLESALE|RETAIL)$"),
+        offset: int = Query(default=0, ge=0, le=100_000),
+        limit: int = Query(default=50, ge=1, le=100),
+    ) -> ReportFilter:
+        try:
+            return ReportFilter(
+                date_from=date_from,
+                date_to=date_to,
+                channel=channel,
+                offset=offset,
+                limit=limit,
+            )
+        except ValueError as exc:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def export_filters(
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        channel: str | None = Query(default=None, pattern=r"^(WHOLESALE|RETAIL)$"),
+        offset: int = Query(default=0, ge=0, le=1000),
+        limit: int = Query(default=1000, ge=1, le=1000),
+    ) -> ReportFilter:
+        try:
+            return ReportFilter(
+                date_from=date_from,
+                date_to=date_to,
+                channel=channel,
+                offset=offset,
+                limit=limit,
+            )
+        except ValueError as exc:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     def audit_export(session: Any, user: Any, request: Request, report_name: str, export_format: str = "csv") -> None:
         record = import_module("avicola_pro.modules.audit.application.writer").AuditRecord
         audit.add(
@@ -138,16 +220,17 @@ def build_reporting_router(
 
     @router.get("/dashboard", response_model=DashboardResponse)
     async def dashboard(
-        report_filters: ReportFilter = Depends(filters),
+        report_filters: ReportFilter = Depends(channel_filters),
         _: Any = Depends(require("reports.profitability.read")),
     ) -> DashboardResponse:
         async with database.session_factory() as session:
             values = await reader.dashboard(session, report_filters)
-            return DashboardResponse(**dashboard_payload(values))
+            period = MetricPeriod(date_from=report_filters.date_from, date_to=report_filters.date_to)
+            return DashboardResponse(**dashboard_payload(values, period=period))
 
     @router.get("/profitability", response_model=PageResponse)
     async def profitability(
-        report_filters: ReportFilter = Depends(filters),
+        report_filters: ReportFilter = Depends(channel_filters),
         _: Any = Depends(require("reports.profitability.read")),
     ) -> PageResponse:
         async with database.session_factory() as session:
@@ -181,23 +264,24 @@ def build_reporting_router(
     @router.get("/profitability.csv")
     async def profitability_csv(
         request: Request,
-        report_filters: ReportFilter = Depends(filters),
+        report_filters: ReportFilter = Depends(export_filters),
         user: Any = Depends(require("reports.export")),
     ) -> Response:
-        if report_filters.offset > 1000:
+        if report_filters.offset + report_filters.limit > report_filters.export_limit:
             raise ForbiddenError(code="export_limit_exceeded", detail="CSV export is limited to 1000 rows")
         export_filters = ReportFilter(
             date_from=report_filters.date_from,
             date_to=report_filters.date_to,
+            channel=report_filters.channel,
             offset=report_filters.offset,
-            limit=min(report_filters.limit, report_filters.export_limit),
+            limit=report_filters.limit,
         )
         async with database.session_factory() as session, session.begin():
             items, _ = await reader.profitability(session, export_filters)
             csv_body = build_csv(
-                ["id", "date", "document_type", "customer", "revenue", "cost", "margin"],
+                ["id", "date", "document_type", "channel", "customer", "revenue"],
                 [
-                    [item[key] for key in ("id", "date", "document_type", "customer", "revenue", "cost", "margin")]
+                    [item[key] for key in ("id", "date", "document_type", "channel", "customer", "revenue")]
                     for item in items
                 ],
             )
@@ -211,23 +295,24 @@ def build_reporting_router(
     @router.get("/profitability.xlsx")
     async def profitability_xlsx(
         request: Request,
-        report_filters: ReportFilter = Depends(filters),
+        report_filters: ReportFilter = Depends(export_filters),
         user: Any = Depends(require("reports.export")),
     ) -> Response:
-        if report_filters.offset > 1000:
+        if report_filters.offset + report_filters.limit > report_filters.export_limit:
             raise ForbiddenError(code="export_limit_exceeded", detail="Excel export is limited to 1000 rows")
         export_filters = ReportFilter(
             date_from=report_filters.date_from,
             date_to=report_filters.date_to,
+            channel=report_filters.channel,
             offset=report_filters.offset,
-            limit=min(report_filters.limit, report_filters.export_limit),
+            limit=report_filters.limit,
         )
         async with database.session_factory() as session, session.begin():
             items, _ = await reader.profitability(session, export_filters)
             workbook = build_xlsx(
-                ["id", "date", "document_type", "customer", "revenue", "cost", "margin"],
+                ["id", "date", "document_type", "channel", "customer", "revenue"],
                 [
-                    [item[key] for key in ("id", "date", "document_type", "customer", "revenue", "cost", "margin")]
+                    [item[key] for key in ("id", "date", "document_type", "channel", "customer", "revenue")]
                     for item in items
                 ],
             )
@@ -239,3 +324,4 @@ def build_reporting_router(
         )
 
     return router
+

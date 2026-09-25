@@ -398,6 +398,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import re
           from pathlib import Path
 
           def values(value, *wanted):
@@ -434,16 +435,30 @@ jobs:
                           for location in result.get("locations", [])
                       ]
                       message = result.get("message", {}).get("text", "").replace("\n", " ")
+                      package_match = re.search(r"Package:\s*(.*?)\s+Installed Version:", message)
+                      installed_match = re.search(r"Installed Version:\s*(.*?)\s+Vulnerability", message)
+                      fixed_match = re.search(r"Fixed Version:\s*(.*?)\s+Link:", message)
+                      severity_match = re.search(r"Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN)", message, re.IGNORECASE)
+                      if not package and package_match:
+                          package = [package_match.group(1).strip()]
+                      if not installed and installed_match:
+                          installed = [installed_match.group(1).strip()]
+                      if not fixed and fixed_match and fixed_match.group(1).strip():
+                          fixed = [fixed_match.group(1).strip()]
+                      severity = severity_match.group(1).upper() if severity_match else (
+                          f"{result.get('level', 'unknown')} / {properties.get('security-severity', 'n/a')}"
+                      )
+                      detail = "n/a" if package_match and installed_match else message[:500] or "n/a"
                       print(
                           " | ".join(
                               (
                                   f"rule={result.get('ruleId', 'unknown')}",
-                                  f"severity={result.get('level', 'unknown')} / {properties.get('security-severity', 'n/a')}",
+                                  f"severity={severity}",
                                   f"package={', '.join(package) or 'see SARIF message'}",
                                   f"installed={', '.join(installed) or 'n/a'}",
-                                  f"fixed={', '.join(fixed) or 'no fix listed'}",
+                                  f"fixed={', '.join(fixed) or 'not listed'}",
                                   f"target={', '.join(target for target in targets if target) or 'n/a'}",
-                                  f"message={message[:500] or 'n/a'}",
+                                  f"message={detail}",
                               )
                           )
                       )

@@ -67,6 +67,9 @@ async def test_dashboard_aggregates_confirmed_operational_facts() -> None:
                 )
             ),
             *[FakeResult(scalar=Decimal("10.00")) for _ in range(6)],
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
         ]
     )
 
@@ -106,6 +109,9 @@ async def test_dashboard_marks_feed_metrics_unavailable_when_unit_is_not_kg() ->
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
         ]
     )
 
@@ -137,6 +143,9 @@ async def test_dashboard_marks_metrics_unavailable_for_missing_birds_cost_and_cu
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
         ]
     )
 
@@ -173,6 +182,9 @@ async def test_dashboard_marks_feed_unavailable_when_no_feed_records_exist() -> 
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
         ]
     )
 
@@ -207,6 +219,9 @@ async def test_dashboard_marks_coverage_unavailable_when_credits_exceed_recent_e
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
+            FakeResult(mappings=[]),
         ]
     )
 
@@ -228,7 +243,8 @@ async def test_profitability_returns_paged_issued_documents() -> None:
                         "id": document_id,
                         "document_date": date(2026, 1, 2),
                         "document_type": "INVOICE",
-                        "customer_name_snapshot": "Cliente sintético",
+                        "channel": "RETAIL",
+                        "customer_name_snapshot": "Cliente sint�tico",
                         "net_total": Decimal("55.00"),
                     }
                 ]
@@ -241,11 +257,25 @@ async def test_profitability_returns_paged_issued_documents() -> None:
     assert total == 3
     assert rows[0]["id"] == document_id
     assert rows[0]["document_type"] == "INVOICE"
+    assert rows[0]["channel"] == "RETAIL"
     assert rows[0]["revenue"] == Decimal("55.00")
     assert rows[0]["cost"] is None
     assert rows[0]["margin"] is None
     assert session.statements[1][1] is not None
     assert session.statements[1][1]["offset"] == 1
+
+
+@pytest.mark.asyncio
+async def test_profitability_applies_selected_channel_to_page_and_count() -> None:
+    session = FakeSession([FakeResult(scalar=1), FakeResult(mappings=[])])
+
+    await reader.profitability(session, ReportFilter(channel="WHOLESALE"))
+
+    for statement, params in session.statements:
+        assert "channel = :channel" in str(statement)
+        assert params == {"channel": "WHOLESALE", "offset": 0, "limit": 50} or params == {
+            "channel": "WHOLESALE"
+        }
 
 
 @pytest.mark.asyncio
@@ -292,3 +322,4 @@ def test_xlsx_is_open_xml_and_never_turns_user_strings_into_formulas() -> None:
     assert b"=1+1" in worksheet
     assert b"12.50" in worksheet
     assert b"<f>" not in worksheet
+

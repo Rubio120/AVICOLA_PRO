@@ -32,6 +32,9 @@ def _date_clause(column: str, filters: ReportFilter) -> tuple[str, dict[str, Any
 
 async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
     sales_clause, params = _date_clause("document_date", filters)
+    if filters.channel is not None:
+        sales_clause += " and channel = :channel"
+        params["channel"] = filters.channel
     sales = await session.execute(
         text(
             "select count(*) filter (where document_type = 'INVOICE') as count, "
@@ -46,9 +49,11 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
         "sales_documents": int(row.count),
         "sales_total": Decimal(row.total),
     }
-    metric_params = {
+    metric_params: dict[str, Any] = {
         "date_from": filters.date_from or date.min,
         "date_to": filters.date_to or date.max,
+        "channel_filter_enabled": filters.channel is not None,
+        "channel": filters.channel or "",
     }
     coverage_to = filters.date_to or date.today()
     metric_params["coverage_from"] = coverage_to - timedelta(days=29)
@@ -110,19 +115,29 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
                join egg_production_events pe on pe.id = c.production_event_id
                join egg_categories ec on ec.id = a.category_id
                where ec.is_saleable and pe.reversal_of_id is null
+                 and not exists (
+                   select 1 from inventory_documents reversed_document
+                   where reversed_document.id = c.inventory_document_id
+                     and reversed_document.status = 'REVERSED'
+                 )
                  and not exists (select 1 from egg_production_events reversal where reversal.reversal_of_id = pe.id)
                  and pe.occurred_on >= :date_from
                  and pe.occurred_on <= :date_to) as saleable_egg_count,
               (select count(*) from (
-                 select customer_id, min(document_date) as first_invoice from commercial_documents
+                 select distinct on (customer_id) customer_id, document_date as first_invoice,
+                        channel as first_channel
+                 from commercial_documents
                  where status = 'ISSUED' and document_type = 'INVOICE' and customer_id is not null
-                 group by customer_id
+                 order by customer_id, document_date, id
                ) first_invoices
-               where first_invoice >= :date_from
-                 and first_invoice <= :date_to) as new_customer_count,
+                 where first_invoice >= :date_from
+                 and first_invoice <= :date_to
+                 and (not :channel_filter_enabled or first_channel = :channel)
+               ) as new_customer_count,
               (select count(*) from commercial_documents
                where status = 'ISSUED' and document_type = 'INVOICE' and customer_id is null
-                 and document_date <= :date_to) as unassigned_invoice_count,
+                 and document_date <= :date_to
+                 and (not :channel_filter_enabled or channel = :channel)) as unassigned_invoice_count,
               (select coalesce(sum(ib.quantity), 0) from inventory_balances ib
                join products p on p.id = ib.product_id
                join egg_categories ec on ec.product_id = p.id
@@ -136,7 +151,8 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
                join egg_categories ec on ec.product_id = p.id
                where d.status = 'ISSUED' and d.document_type in ('INVOICE', 'CREDIT_NOTE')
                  and p.base_unit_code = 'unit' and ec.is_saleable and ec.is_active
-                 and d.document_date >= :coverage_from and d.document_date <= :coverage_to) as net_egg_sales_30d
+                 and d.document_date >= :coverage_from and d.document_date <= :coverage_to
+                 and (not :channel_filter_enabled or d.channel = :channel)) as net_egg_sales_30d
             """
         ),
         metric_params,
@@ -207,26 +223,91 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
     }.items():
         result = await session.execute(text(query))
         values[key] = Decimal(result.scalar_one())
+
+    mortality_result = await session.execute(
+        text(
+            """
+            select occurred_on, sum(quantity) as deaths
+            from mortality_events event
+            where event.status = 'CONFIRMED' and event.reversal_of_id is null
+              and not exists (
+                select 1 from mortality_events reversal
+                where reversal.reversal_of_id = event.id and reversal.status = 'CONFIRMED'
+              )
+              and event.occurred_on >= :date_from and event.occurred_on <= :date_to
+            group by occurred_on
+            order by occurred_on
+            """
+        ),
+        {"date_from": filters.date_from or date.min, "date_to": filters.date_to or date.max},
+    )
+    values["daily_mortality"] = [
+        {"occurred_on": item["occurred_on"], "deaths": Decimal(item["deaths"])}
+        for item in mortality_result.mappings()
+    ]
+
+    age_as_of = date.today()
+    flock_result = await session.execute(
+        text("select code, entry_date from flocks where status = 'ACTIVE' and entry_date <= :as_of order by code"),
+        {"as_of": age_as_of},
+    )
+    values["active_flock_ages"] = [
+        {
+            "flock_code": item["code"],
+            "days_since_entry": (age_as_of - item["entry_date"]).days,
+            "as_of": age_as_of,
+        }
+        for item in flock_result.mappings()
+    ]
+    feed_by_house_result = await session.execute(
+        text(
+            """
+            select h.code as house_code, p.base_unit_code as unit_code, sum(fc.quantity) as quantity
+            from feed_consumption fc
+            join products p on p.id = fc.product_id
+            join inventory_movements im on im.id = fc.inventory_movement_id
+            join inventory_documents d on d.id = im.document_id
+            left join houses h on h.id = fc.house_id
+            where d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+              and im.reversal_of_id is null
+              and fc.occurred_on >= :date_from and fc.occurred_on <= :date_to
+            group by h.code, p.base_unit_code
+            order by h.code nulls last, p.base_unit_code
+            """
+        ),
+        {"date_from": filters.date_from or date.min, "date_to": filters.date_to or date.max},
+    )
+    values["feed_consumption_by_house"] = [
+        {
+            "house_code": item["house_code"],
+            "unit_code": item["unit_code"],
+            "quantity": Decimal(item["quantity"]),
+        }
+        for item in feed_by_house_result.mappings()
+    ]
     return values
 
 
 async def profitability(session: Any, filters: ReportFilter) -> tuple[list[dict[str, Any]], int]:
     clause, params = _date_clause("document_date", filters)
+    if filters.channel is not None:
+        clause += " and channel = :channel"
+        params["channel"] = filters.channel
     count_result = await session.execute(
         text("select count(*) from commercial_documents where status = 'ISSUED'" + clause),  # noqa: S608
-        params,
+        params.copy(),
     )
     total = int(count_result.scalar_one())
-    params.update({"offset": filters.offset, "limit": filters.limit})
+    page_params = params | {"offset": filters.offset, "limit": filters.limit}
     result = await session.execute(
         text(
-            "select id, document_date, document_type, customer_name_snapshot, "
+            "select id, document_date, document_type, channel, customer_name_snapshot, "
             "case when document_type = 'CREDIT_NOTE' then -total else total end as net_total "
             "from commercial_documents where status = 'ISSUED'"
             + clause
             + " order by document_date desc, id desc offset :offset limit :limit"
         ),
-        params,
+        page_params,
     )
     rows = []
     for item in result.mappings():
@@ -235,6 +316,7 @@ async def profitability(session: Any, filters: ReportFilter) -> tuple[list[dict[
                 "id": item["id"],
                 "date": item["document_date"],
                 "document_type": item["document_type"],
+                "channel": item["channel"] or "LEGACY_UNCLASSIFIED",
                 "customer": item["customer_name_snapshot"],
                 "revenue": Decimal(item["net_total"]),
                 "cost": None,
@@ -282,3 +364,4 @@ async def commercial_sales(
         }
         for item in result.mappings()
     ]
+

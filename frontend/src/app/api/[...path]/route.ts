@@ -23,19 +23,23 @@ function isAllowedPath(path: string) {
 
 export async function handler(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  if (path.some((segment) => segment === "." || segment === ".." || /[\\/%]/.test(segment))) {
+    return NextResponse.json({ detail: "Not found" }, { status: 404 });
+  }
   const backendPath = path.join("/");
   if (!isAllowedPath(backendPath)) {
     return NextResponse.json({ detail: "Not found" }, { status: 404 });
   }
 
   const environment = getServerEnv();
+  const search = new URL(request.url).search;
   const headers = new Headers();
   for (const name of ["content-type", "cookie", "user-agent", "x-correlation-id", "x-csrf-token"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
 
-  const response = await fetch(`${environment.BACKEND_INTERNAL_URL}/api/${backendPath}`, {
+  const response = await fetch(`${environment.BACKEND_INTERNAL_URL}/api/${backendPath}${search}`, {
     method: request.method,
     headers,
     body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
@@ -53,3 +57,4 @@ export async function handler(request: NextRequest, context: { params: Promise<{
 
 export const GET = handler;
 export const POST = handler;
+

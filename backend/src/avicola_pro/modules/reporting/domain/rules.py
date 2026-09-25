@@ -15,16 +15,19 @@ from xml.etree import ElementTree as ET
 class ReportFilter:
     date_from: date | None = None
     date_to: date | None = None
+    channel: str | None = None
     offset: int = 0
     limit: int = 50
 
     def __post_init__(self) -> None:
         if self.offset < 0 or self.offset > 100_000:
             raise ValueError("offset must be between 0 and 100000")
-        if self.limit < 1 or self.limit > 100:
-            raise ValueError("limit must be between 1 and 100")
+        if self.limit < 1 or self.limit > 1000:
+            raise ValueError("limit must be between 1 and 1000")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("date_from cannot be after date_to")
+        if self.channel not in {None, "WHOLESALE", "RETAIL"}:
+            raise ValueError("channel must be WHOLESALE or RETAIL")
 
     @property
     def export_limit(self) -> int:
@@ -47,8 +50,16 @@ def build_csv(headers: list[str], rows: list[list[Any]]) -> str:
     output = StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
     writer.writerow(headers)
-    writer.writerows(rows)
+    writer.writerows([[_safe_csv_value(value) for value in row] for row in rows])
     return output.getvalue()
+
+
+def _safe_csv_value(value: Any) -> Any:
+    if isinstance(value, str):
+        first_non_whitespace = value.lstrip(" \t\r\n")[:1]
+        if first_non_whitespace in {"=", "+", "-", "@"} or value.startswith(("\t", "\r", "\n")):
+            return "'" + value
+    return value
 
 
 def build_xlsx(headers: list[str], rows: list[list[Any]]) -> bytes:
@@ -149,3 +160,4 @@ def _package_relationship_xml() -> bytes:
         },
     )
     return cast(bytes, ET.tostring(root, encoding="utf-8", xml_declaration=True))
+

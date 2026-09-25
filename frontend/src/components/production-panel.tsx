@@ -7,6 +7,12 @@ type EggOption = { flock_id: string; flock_code: string; house_id: string; house
 type EggRecord = { id: string; flock_id: string; house_id: string; occurred_on: string; egg_count: number };
 type EggCategoryOption = { id: string; code: string; name: string; is_active: boolean };
 type EggWarehouseOption = { id: string; code: string; name: string };
+type EggClassification = {
+  id: string;
+  warehouse_id: string;
+  inventory_status: string | null;
+  allocations: { category_id: string; category_code: string; egg_count: number }[];
+};
 
 async function fetchEggRecords(recordDate: string, signal?: AbortSignal): Promise<EggRecord[]> {
   const query = new URLSearchParams({ date_from: recordDate, date_to: recordDate, limit: "100", offset: "0" });
@@ -62,6 +68,14 @@ export function ProductionPanel() {
   const [classificationKeys, setClassificationKeys] = useState<Record<string, string>>({});
   const [classificationError, setClassificationError] = useState("");
   const [classificationState, setClassificationState] = useState<"idle" | "saving" | "saved">("idle");
+  const [classificationHistory, setClassificationHistory] = useState<Record<string, EggClassification[]>>({});
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [reversalReasons, setReversalReasons] = useState<Record<string, string>>({});
+  const [reversalFormOpen, setReversalFormOpen] = useState<Record<string, boolean>>({});
+  const [reversalErrors, setReversalErrors] = useState<Record<string, string>>({});
+  const [reversingId, setReversingId] = useState<string | null>(null);
+  const [reversalSaved, setReversalSaved] = useState(false);
 
   useEffect(() => {
     fetch("/api/v1/production/balances", { credentials: "include" })
@@ -127,6 +141,60 @@ export function ProductionPanel() {
     if (unclassified) setUnclassifiedResult({ forDate: occurredOn, state: "ready", items: unclassified });
   }
 
+  async function loadClassificationHistory(recordId: string) {
+    setHistoryLoading((current) => ({ ...current, [recordId]: true }));
+    try {
+      const response = await fetch(`/api/v1/production/egg-records/${recordId}/classifications`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("classification history unavailable");
+      const history = (await response.json()) as EggClassification[];
+      setClassificationHistory((current) => ({ ...current, [recordId]: history }));
+      setHistoryOpen((current) => ({ ...current, [recordId]: true }));
+    } catch {
+      setReversalErrors((current) => ({ ...current, [recordId]: "No se pudo cargar el historial de clasificaci�n." }));
+    } finally {
+      setHistoryLoading((current) => ({ ...current, [recordId]: false }));
+    }
+  }
+
+  async function reverseClassification(
+    event: React.FormEvent<HTMLFormElement>,
+    recordId: string,
+    classificationId: string,
+  ) {
+    event.preventDefault();
+    const reason = reversalReasons[classificationId]?.trim() ?? "";
+    if (!reason) {
+      setReversalErrors((current) => ({ ...current, [recordId]: "Indica un motivo para revertir la clasificaci�n." }));
+      return;
+    }
+    setReversalErrors((current) => ({ ...current, [recordId]: "" }));
+    setReversingId(classificationId);
+    try {
+      const response = await fetch(
+        `/api/v1/production/egg-records/${recordId}/classifications/${classificationId}/reverse`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": window.sessionStorage.getItem("avicola_csrf_token") ?? "",
+          },
+          body: JSON.stringify({ reason }),
+        },
+      );
+      if (!response.ok) throw new Error("egg classification reversal failed");
+      await loadClassificationHistory(recordId);
+      await refreshEggRecords();
+      setReversalSaved(true);
+    } catch {
+      setReversalErrors((current) => ({ ...current, [recordId]: "No se pudo revertir la clasificaci�n." }));
+    } finally {
+      setReversingId(null);
+    }
+  }
+
   async function recordEggs(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const count = Number(eggCount);
@@ -171,16 +239,16 @@ export function ProductionPanel() {
       .filter((item) => item.raw !== "")
       .map((item) => ({ category_id: item.category_id, egg_count: Number(item.raw) }));
     if (values.some((item) => !Number.isSafeInteger(item.egg_count) || item.egg_count < 0)) {
-      setClassificationError("Las cantidades por categoría deben ser huevos enteros no negativos.");
+      setClassificationError("Las cantidades por categor�a deben ser huevos enteros no negativos.");
       return;
     }
     if (values.reduce((total, item) => total + item.egg_count, 0) !== record.egg_count) {
-      setClassificationError("La suma por categorías debe coincidir con el total diario.");
+      setClassificationError("La suma por categor�as debe coincidir con el total diario.");
       return;
     }
     const warehouseId = classificationWarehouse[record.id];
     if (!warehouseId) {
-      setClassificationError("Selecciona el depósito que recibirá los huevos.");
+      setClassificationError("Selecciona el dep�sito que recibir� los huevos.");
       return;
     }
     const idempotencyKey = classificationKeys[record.id] ?? crypto.randomUUID();
@@ -206,7 +274,7 @@ export function ProductionPanel() {
       await refreshEggRecords();
     } catch {
       setClassificationState("idle");
-      setClassificationError("No se pudo guardar la clasificación de huevos.");
+      setClassificationError("No se pudo guardar la clasificaci�n de huevos.");
     }
   }
 
@@ -214,18 +282,18 @@ export function ProductionPanel() {
   return (
     <section className="technical-card" aria-labelledby="production-title">
       <p className="eyebrow">Entrega 5</p>
-      <h2 id="production-title">Producción avícola</h2>
+      <h2 id="production-title">Producci�n av�cola</h2>
       <p>Lotes activos y saldo de aves vivas reconstruible desde eventos.</p>
-      {state === "loading" ? <p role="status">Cargando producción…</p> : null}
-      {state === "error" ? <p role="alert">No se pudo cargar producción.</p> : null}
+      {state === "loading" ? <p role="status">Cargando producci�n.</p> : null}
+      {state === "error" ? <p role="alert">No se pudo cargar producci�n.</p> : null}
       {state === "ready" && balances.length === 0 ? <p>Sin lotes activos.</p> : null}
       {balances.length > 0 ? (
         <ul>
           {balances.map((balance) => <li key={balance.flock_id}>{balance.flock_id}: {balance.live_birds} aves vivas</li>)}
         </ul>
       ) : null}
-      <h3>Producción diaria de huevos</h3>
-      <p>Registra unidades enteras por lote, galpón y fecha.</p>
+      <h3>Producci�n diaria de huevos</h3>
+      <p>Registra unidades enteras por lote, galp�n y fecha.</p>
       <form onSubmit={recordEggs}>
         <label htmlFor="egg-flock-id">Lote</label>
         <select
@@ -244,7 +312,7 @@ export function ProductionPanel() {
             <option key={id} value={id}>{code}</option>
           ))}
         </select>
-        <label htmlFor="egg-house-id">Galpón</label>
+        <label htmlFor="egg-house-id">Galp�n</label>
         <select
           id="egg-house-id"
           value={houseId}
@@ -255,7 +323,7 @@ export function ProductionPanel() {
           }}
           required
         >
-          <option value="">Selecciona un galpón</option>
+          <option value="">Selecciona un galp�n</option>
           {eggOptions.filter((option) => option.flock_id === flockId).map((option) => (
             <option key={option.house_id} value={option.house_id}>{option.house_code}</option>
           ))}
@@ -291,7 +359,7 @@ export function ProductionPanel() {
           type="submit"
           disabled={eggState === "saving" || !optionsAreCurrent || optionsResult.state !== "ready" || eggOptions.length === 0}
         >
-          {eggState === "saving" ? "Guardando…" : "Registrar huevos"}
+          {eggState === "saving" ? "Guardando." : "Registrar huevos"}
         </button>
       </form>
       {!optionsAreCurrent ? <p role="status">Cargando lotes y galpones.</p> : null}
@@ -299,8 +367,8 @@ export function ProductionPanel() {
       {optionsAreCurrent && optionsResult.state === "ready" && eggOptions.length === 0 ? (
         <p>No hay lotes y galpones activos para esa fecha.</p>
       ) : null}
-      {eggState === "saved" ? <p role="status">Producción de huevos registrada.</p> : null}
-      {eggState === "error" ? <p role="alert">No se pudo registrar la producción de huevos.</p> : null}
+      {eggState === "saved" ? <p role="status">Producci�n de huevos registrada.</p> : null}
+      {eggState === "error" ? <p role="alert">No se pudo registrar la producci�n de huevos.</p> : null}
       <h3>Registros para la fecha</h3>
       {!recordsAreCurrent ? <p role="status">Cargando registros de huevos.</p> : null}
       {recordsAreCurrent && recordsResult.state === "error" ? (
@@ -312,31 +380,88 @@ export function ProductionPanel() {
       {eggRecords.length > 0 ? (
         <ul>
           {eggRecords.map((record) => (
-            <li key={record.id}>{record.occurred_on}: {record.egg_count} huevos (lote {record.flock_id})</li>
+            <li key={record.id}>
+              {record.occurred_on}: {record.egg_count} huevos (lote {record.flock_id})
+              <button
+                type="button"
+                disabled={historyLoading[record.id]}
+                onClick={() => {
+                  if (historyOpen[record.id]) {
+                    setHistoryOpen((current) => ({ ...current, [record.id]: false }));
+                  } else {
+                    void loadClassificationHistory(record.id);
+                  }
+                }}
+              >
+                {historyLoading[record.id] ? "Cargando historial." : "Ver clasificaciones"}
+              </button>
+              {historyOpen[record.id] ? (
+                <ul>
+                  {(classificationHistory[record.id] ?? []).map((classification) => (
+                    <li key={classification.id}>
+                      <p>
+                        {classification.allocations.map((allocation) => `${allocation.category_code}: ${allocation.egg_count} huevos`).join(", ") || "Sin unidades clasificadas"}
+                        {classification.inventory_status === "REVERSED" ? " - Revertida" : ""}
+                      </p>
+                      {classification.inventory_status === "CONFIRMED" ? (
+                        <form onSubmit={(event) => void reverseClassification(event, record.id, classification.id)}>
+                          <button
+                            type="button"
+                            disabled={reversingId !== null}
+                            onClick={() => {
+                              setReversalFormOpen((current) => ({ ...current, [classification.id]: !current[classification.id] }));
+                              setReversalErrors((current) => ({ ...current, [record.id]: "" }));
+                            }}
+                          >
+                            Revertir clasificaci�n
+                          </button>
+                          {reversalFormOpen[classification.id] ? (
+                            <>
+                              <label htmlFor={`classification-reason-${classification.id}`}>Motivo de reversi�n</label>
+                              <textarea
+                                id={`classification-reason-${classification.id}`}
+                                maxLength={500}
+                                value={reversalReasons[classification.id] ?? ""}
+                                onChange={(event) => setReversalReasons((current) => ({ ...current, [classification.id]: event.target.value }))}
+                              />
+                              <button type="submit" disabled={reversingId === classification.id}>
+                                {reversingId === classification.id ? "Revirtiendo." : "Confirmar reversi�n"}
+                              </button>
+                            </>
+                          ) : null}
+                        </form>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {reversalErrors[record.id] ? <p role="alert">{reversalErrors[record.id]}</p> : null}
+            </li>
           ))}
         </ul>
       ) : null}
-      <h3>Clasificación de producción pendiente</h3>
+      {reversalSaved ? <p role="status">Clasificaci�n revertida; el movimiento compensatorio qued� registrado.</p> : null}
+      <h3>Clasificaci�n de producci�n pendiente</h3>
       {!unclassifiedAreCurrent ? <p role="status">Cargando clasificaciones pendientes.</p> : null}
       {unclassifiedAreCurrent && unclassifiedResult.state === "error" ? (
         <p role="alert">No se pudieron cargar las clasificaciones pendientes.</p>
       ) : null}
       {unclassifiedAreCurrent && unclassifiedResult.state === "ready" && unclassifiedRecords.length === 0 ? (
-        <p>Sin producción pendiente de clasificar.</p>
+        <p>Sin producci�n pendiente de clasificar.</p>
       ) : null}
       {unclassifiedRecords.map((record) => (
         <form key={record.id} onSubmit={(event) => void classifyEggs(event, record)}>
-          <p>{record.occurred_on}: {record.egg_count} huevos pendientes · lote {record.flock_id}</p>
-          <label htmlFor={`egg-classification-warehouse-${record.id}`}>Depósito para {record.id}</label>
+          <p>{record.occurred_on}: {record.egg_count} huevos pendientes � lote {record.flock_id}</p>
+          <label htmlFor={`egg-classification-warehouse-${record.id}`}>Dep�sito para {record.id}</label>
           <select
             id={`egg-classification-warehouse-${record.id}`}
             value={classificationWarehouse[record.id] ?? ""}
             onChange={(event) => setClassificationWarehouse((current) => ({ ...current, [record.id]: event.target.value }))}
             required
           >
-            <option value="">Selecciona depósito</option>
+            <option value="">Selecciona dep�sito</option>
             {eggWarehouses.map((warehouse) => (
-              <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>
+              <option key={warehouse.id} value={warehouse.id}>{warehouse.code} � {warehouse.name}</option>
             ))}
           </select>
           {eggCategories.map((category) => (
@@ -357,21 +482,22 @@ export function ProductionPanel() {
             </div>
           ))}
           {eggCategories.length === 0 && record.egg_count > 0 ? (
-            <p>Primero configura al menos una categoría de huevos en Inventario.</p>
+            <p>Primero configura al menos una categor�a de huevos en Inventario.</p>
           ) : null}
           <button
             type="submit"
             disabled={classificationState === "saving" || eggWarehouses.length === 0 || (record.egg_count > 0 && eggCategories.length === 0)}
           >
-            {classificationState === "saving" ? "Guardando clasificación." : "Confirmar clasificación"}
+            {classificationState === "saving" ? "Guardando clasificaci�n." : "Confirmar clasificaci�n"}
           </button>
         </form>
       ))}
       {classificationError ? <p role="alert">{classificationError}</p> : null}
-      {classificationState === "saved" ? <p role="status">Clasificación de huevos guardada.</p> : null}
+      {classificationState === "saved" ? <p role="status">Clasificaci�n de huevos guardada.</p> : null}
       {unclassifiedRecords.length > 0 ? (
-        <p>La existencia física se registra por huevo individual; el costo por huevo sigue pendiente de la fórmula aprobada.</p>
+        <p>La existencia f�sica se registra por huevo individual; el costo por huevo sigue pendiente de la f�rmula aprobada.</p>
       ) : null}
     </section>
   );
 }
+

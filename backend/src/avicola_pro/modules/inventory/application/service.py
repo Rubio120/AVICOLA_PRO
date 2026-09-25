@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from avicola_pro.modules.inventory.domain.egg_units import to_base_egg_units
-from avicola_pro.modules.inventory.domain.rules import calculate_inbound, calculate_outbound
+from avicola_pro.modules.inventory.domain.rules import InventoryRuleError, calculate_inbound, calculate_outbound
 
 _sqlalchemy = import_module("sqlalchemy")
 _postgresql = import_module("sqlalchemy.dialects.postgresql")
@@ -271,7 +271,10 @@ class InventoryService:
     ) -> Decimal:
         balance = await self._balance(session, warehouse_id, line.product_id, line.inventory_lot_id)
         previous_value = balance.inventory_value
-        result = calculate_outbound(balance.quantity, balance.inventory_value, line.quantity)
+        try:
+            result = calculate_outbound(balance.quantity, balance.inventory_value, line.quantity)
+        except InventoryRuleError as exc:
+            raise InventoryConflictError(str(exc)) from exc
         balance.quantity = result.quantity
         balance.inventory_value = result.value
         balance.average_cost = Decimal("0") if result.quantity == 0 else result.unit_cost
@@ -297,3 +300,4 @@ class InventoryService:
 
 
 inventory_service = InventoryService()
+

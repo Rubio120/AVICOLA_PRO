@@ -145,6 +145,19 @@ class EggClassificationResponse(BaseModel):
     inventory_document_id: UUID | None
 
 
+class EggClassificationAllocationResponse(BaseModel):
+    category_id: UUID
+    category_code: str
+    egg_count: int
+
+
+class EggClassificationHistoryResponse(BaseModel):
+    id: UUID
+    warehouse_id: UUID
+    inventory_status: str | None
+    allocations: list[EggClassificationAllocationResponse]
+
+
 class EggClassificationReversalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -424,6 +437,18 @@ def build_production_router(
                 add_audit(session, user, request, "production.eggs.classify", str(classification.id))
             return EggClassificationResponse.model_validate(classification)
 
+    @router.get(
+        "/egg-records/{production_event_id}/classifications",
+        response_model=list[EggClassificationHistoryResponse],
+    )
+    async def egg_classification_history(
+        production_event_id: UUID,
+        _: Any = Depends(require("production.eggs.read")),  # noqa: B008
+    ) -> list[EggClassificationHistoryResponse]:  # noqa: B008
+        async with database.session_factory() as session:
+            history = await production_service.list_egg_classifications(session, production_event_id)
+            return [EggClassificationHistoryResponse.model_validate(item) for item in history]
+
     @router.post(
         "/egg-records/{production_event_id}/classifications/{classification_id}/reverse",
         response_model=EggClassificationReversalResponse,
@@ -475,3 +500,4 @@ def build_production_router(
                 raise ForbiddenError(code="invalid_production_operation", detail=str(exc)) from None
 
     return router
+

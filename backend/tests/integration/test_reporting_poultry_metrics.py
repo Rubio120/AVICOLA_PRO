@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -28,6 +28,7 @@ from avicola_pro.modules.production.infrastructure.models import (
     FeedConsumption,
     Flock,
     FlockDailyRecord,
+    MortalityEvent,
 )
 from avicola_pro.modules.reporting.domain.rules import ReportFilter
 from avicola_pro.modules.reporting.infrastructure.reader import dashboard
@@ -54,6 +55,20 @@ async def test_dashboard_aggregates_confirmed_poultry_and_commercial_facts_acros
     assert metrics["feed_cost_per_egg"].value == Decimal("0.27")
     assert metrics["average_ticket"].value == Decimal("1250")
     assert metrics["new_customers"].value == Decimal("1")
+    assert result["daily_mortality"] == [{"occurred_on": date(2026, 1, 10), "deaths": Decimal("3")}]
+    ages = [
+        age for age in result["active_flock_ages"] if age["flock_code"].startswith(("FLOCK-A-", "FLOCK-B-"))
+    ]
+    assert [(age["flock_code"].split("-")[1], age["days_since_entry"]) for age in ages] == [
+        ("A", (date.today() - PERIOD_FROM).days),
+        ("B", (date.today() - PERIOD_FROM).days),
+    ]
+    assert all(age["as_of"] == date.today() for age in ages)
+    feed_by_house = result["feed_consumption_by_house"]
+    assert len(feed_by_house) == 1
+    assert feed_by_house[0]["house_code"].startswith("HOUSE-")
+    assert feed_by_house[0]["unit_code"] == "kg"
+    assert feed_by_house[0]["quantity"] == Decimal("90.0000")
     assert result["sales_documents"] == 2
     assert result["sales_total"] == Decimal("2500")
 
@@ -84,6 +99,20 @@ async def test_dashboard_excludes_feed_consumption_without_confirmed_inventory_m
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_feed_cost_per_egg_does_not_double_count_reclassified_eggs() -> None:
+    result = await _dashboard_fixture(
+        include_reversed_feed=False,
+        include_unlinked_feed=False,
+        include_reversed_classification=True,
+    )
+
+    metric = result["poultry_metrics"]["feed_cost_per_egg"]
+    assert metric.available is True
+    assert metric.value == Decimal("0.27")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_dashboard_calculates_coverage_from_base_unit_egg_sales() -> None:
     result = await _dashboard_fixture(include_reversed_feed=False, include_unlinked_feed=False)
 
@@ -92,7 +121,32 @@ async def test_dashboard_calculates_coverage_from_base_unit_egg_sales() -> None:
     assert coverage.value == Decimal("900") * Decimal("30") / Decimal("85")
 
 
-async def _dashboard_fixture(*, include_reversed_feed: bool, include_unlinked_feed: bool) -> dict[str, Any]:
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_dashboard_applies_channel_to_commercial_metrics_and_coverage() -> None:
+    result = await _dashboard_fixture(
+        include_reversed_feed=False,
+        include_unlinked_feed=False,
+        include_wholesale_invoice=True,
+        channel="WHOLESALE",
+    )
+
+    metrics = result["poultry_metrics"]
+    assert result["sales_documents"] == 1
+    assert result["sales_total"] == Decimal("800")
+    assert metrics["average_ticket"].value == Decimal("800")
+    assert metrics["new_customers"].value == Decimal("1")
+    assert metrics["stock_coverage"].value == Decimal("900")
+
+
+async def _dashboard_fixture(
+    *,
+    include_reversed_feed: bool,
+    include_unlinked_feed: bool,
+    include_reversed_classification: bool = False,
+    include_wholesale_invoice: bool = False,
+    channel: str | None = None,
+) -> dict[str, Any]:
     load_persistence_models()
     engine = create_async_engine(_database_url())
     try:
@@ -111,10 +165,12 @@ async def _dashboard_fixture(*, include_reversed_feed: bool, include_unlinked_fe
                         session,
                         include_reversed_feed=include_reversed_feed,
                         include_unlinked_feed=include_unlinked_feed,
+                        include_reversed_classification=include_reversed_classification,
+                        include_wholesale_invoice=include_wholesale_invoice,
                     )
                     result = await dashboard(
                         session,
-                        ReportFilter(date_from=PERIOD_FROM, date_to=PERIOD_TO),
+                        ReportFilter(date_from=PERIOD_FROM, date_to=PERIOD_TO, channel=channel),
                     )
                 return result
             finally:
@@ -129,6 +185,8 @@ async def _seed_fixture(
     *,
     include_reversed_feed: bool,
     include_unlinked_feed: bool,
+    include_reversed_classification: bool = False,
+    include_wholesale_invoice: bool = False,
 ) -> None:
     suffix = uuid4().hex[:10]
     actor_id = uuid4()
@@ -166,6 +224,7 @@ async def _seed_fixture(
                 purpose="Synthetic layers",
                 entry_date=PERIOD_FROM,
                 planned_initial_quantity=Decimal("500"),
+                status="ACTIVE",
             )
         )
     products = (
@@ -199,6 +258,44 @@ async def _seed_fixture(
         ),
     )
     session.add_all(products)
+    reversed_mortality_id = uuid4()
+    session.add_all(
+        (
+            MortalityEvent(
+                id=uuid4(),
+                flock_id=flock_a_id,
+                house_id=house_id,
+                occurred_on=date(2026, 1, 10),
+                quantity=Decimal("1"),
+                cause="Synthetic recorded mortality",
+            ),
+            MortalityEvent(
+                id=uuid4(),
+                flock_id=flock_b_id,
+                house_id=house_id,
+                occurred_on=date(2026, 1, 10),
+                quantity=Decimal("2"),
+                cause="Synthetic recorded mortality",
+            ),
+            MortalityEvent(
+                id=reversed_mortality_id,
+                flock_id=flock_a_id,
+                house_id=house_id,
+                occurred_on=date(2026, 1, 11),
+                quantity=Decimal("4"),
+                cause="Synthetic reversed mortality",
+            ),
+            MortalityEvent(
+                id=uuid4(),
+                flock_id=flock_a_id,
+                house_id=house_id,
+                occurred_on=date(2026, 1, 11),
+                quantity=Decimal("4"),
+                cause="Synthetic mortality correction",
+                reversal_of_id=reversed_mortality_id,
+            ),
+        )
+    )
     saleable_category_id, other_category_id = uuid4(), uuid4()
     session.add_all(
         (
@@ -287,6 +384,34 @@ async def _seed_fixture(
     )
     await session.flush()
     classification_a_id, classification_b_id = uuid4(), uuid4()
+    reversed_classification_document_id = uuid4()
+    active_classification_document_id = uuid4()
+    if include_reversed_classification:
+        now = datetime.now(UTC)
+        session.add_all(
+            (
+                InventoryDocument(
+                    id=reversed_classification_document_id,
+                    document_type="RECEIPT",
+                    effective_date=date(2026, 1, 11),
+                    warehouse_id=warehouse_id,
+                    status="REVERSED",
+                    reversed_at=now,
+                    reversed_by=actor_id,
+                    reversal_reason="Synthetic reclassification fixture",
+                ),
+                InventoryDocument(
+                    id=active_classification_document_id,
+                    document_type="RECEIPT",
+                    effective_date=date(2026, 1, 11),
+                    warehouse_id=warehouse_id,
+                    status="CONFIRMED",
+                    confirmed_at=now,
+                    confirmed_by=actor_id,
+                ),
+            )
+        )
+        await session.flush()
     session.add_all(
         (
             EggProductionClassification(
@@ -300,6 +425,9 @@ async def _seed_fixture(
                 id=classification_b_id,
                 production_event_id=egg_b_id,
                 warehouse_id=warehouse_id,
+                inventory_document_id=(
+                    reversed_classification_document_id if include_reversed_classification else None
+                ),
                 idempotency_key=f"class-b-{suffix}",
                 actor_user_id=actor_id,
             ),
@@ -319,6 +447,35 @@ async def _seed_fixture(
             ),
         )
     )
+    if include_reversed_classification:
+        replacement_classification_id = uuid4()
+        session.add(
+            EggProductionClassification(
+                id=replacement_classification_id,
+                production_event_id=egg_b_id,
+                warehouse_id=warehouse_id,
+                inventory_document_id=active_classification_document_id,
+                idempotency_key=f"class-b-replacement-{suffix}",
+                actor_user_id=actor_id,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            (
+                EggProductionAllocation(
+                    id=uuid4(),
+                    classification_id=replacement_classification_id,
+                    category_id=saleable_category_id,
+                    egg_count=400,
+                ),
+                EggProductionAllocation(
+                    id=uuid4(),
+                    classification_id=replacement_classification_id,
+                    category_id=other_category_id,
+                    egg_count=200,
+                ),
+            )
+        )
 
     feed_consumptions = [
         (flock_a_id, feed_a_id, Decimal("60"), Decimal("2")),
@@ -340,6 +497,7 @@ async def _seed_fixture(
                 id=uuid4(),
                 flock_id=flock_id,
                 product_id=product_id,
+                house_id=house_id,
                 warehouse_id=warehouse_id,
                 quantity=quantity,
                 inventory_movement_id=movement_id,
@@ -387,6 +545,7 @@ async def _seed_fixture(
         )
 
     customer_old_id, customer_new_id = uuid4(), uuid4()
+    customer_wholesale_id = uuid4()
     session.add_all(
         (
             Customer(
@@ -402,6 +561,19 @@ async def _seed_fixture(
                 document_type="RUC",
                 document_number=f"801{suffix}",
                 name="Synthetic new customer",
+            ),
+            *(
+                [
+                    Customer(
+                        id=customer_wholesale_id,
+                        code=f"CUSTOMER-WHOLESALE-{suffix}",
+                        document_type="RUC",
+                        document_number=f"802{suffix}",
+                        name="Synthetic wholesale customer",
+                    )
+                ]
+                if include_wholesale_invoice
+                else []
             ),
         )
     )
@@ -458,7 +630,22 @@ async def _seed_fixture(
         suffix=f"reversed-{suffix}",
         status="REVERSED",
     )
-    session.add_all((invoice_old, invoice_a, invoice_b, credit_note, draft_invoice, outside_invoice, reversed_invoice))
+    wholesale_invoice = (
+        _commercial_document(
+            customer_id=customer_wholesale_id,
+            document_type="INVOICE",
+            document_date=date(2026, 1, 13),
+            total=Decimal("800"),
+            suffix=f"wholesale-{suffix}",
+            channel="WHOLESALE",
+        )
+        if include_wholesale_invoice
+        else None
+    )
+    documents = [invoice_old, invoice_a, invoice_b, credit_note, draft_invoice, outside_invoice, reversed_invoice]
+    if wholesale_invoice is not None:
+        documents.append(wholesale_invoice)
+    session.add_all(documents)
     await session.flush()
     for document, quantity, unit_price in (
         (invoice_a, Decimal("40"), Decimal("25")),
@@ -481,6 +668,22 @@ async def _seed_fixture(
                 base_amount=unit_price * quantity,
                 tax_amount=Decimal("0"),
                 total=unit_price * quantity,
+            )
+        )
+    if wholesale_invoice is not None:
+        session.add(
+            CommercialDocumentLine(
+                id=uuid4(),
+                commercial_document_id=wholesale_invoice.id,
+                ordinal=1,
+                product_id=egg_saleable_id,
+                description="Synthetic wholesale egg units",
+                quantity=Decimal("30"),
+                unit_price=Decimal("800") / Decimal("30"),
+                tax_rate=Decimal("0"),
+                base_amount=Decimal("800"),
+                tax_amount=Decimal("0"),
+                total=Decimal("800"),
             )
         )
 
@@ -566,6 +769,7 @@ def _commercial_document(
     suffix: str,
     status: str = "ISSUED",
     original_document_id: UUID | None = None,
+    channel: str = "RETAIL",
 ) -> CommercialDocument:
     return CommercialDocument(
         id=uuid4(),
@@ -576,8 +780,9 @@ def _commercial_document(
         customer_name_snapshot="Synthetic customer",
         customer_document_snapshot="RUC:SYNTHETIC",
         document_date=document_date,
-        channel="RETAIL",
+        channel=channel,
         status=status,
         total=total,
         original_document_id=original_document_id,
     )
+

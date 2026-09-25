@@ -165,6 +165,7 @@ def test_egg_production_routes_are_registered() -> None:
     assert ("GET", "/api/v1/production/egg-record-options") in endpoints
     assert ("GET", "/api/v1/production/egg-records/unclassified") in endpoints
     assert ("POST", "/api/v1/production/egg-records/{production_event_id}/classifications") in endpoints
+    assert ("GET", "/api/v1/production/egg-records/{production_event_id}/classifications") in endpoints
     assert (
         "POST",
         "/api/v1/production/egg-records/{production_event_id}/classifications/{classification_id}/reverse",
@@ -238,3 +239,58 @@ async def test_egg_classification_reversal_endpoint_audits_the_compensation(monk
     assert len(audit_records) == 1
     assert cast(Any, audit_records[0]).action == "production.eggs.classification.reverse"
     assert cast(Any, audit_records[0]).resource_id == str(reversal_id)
+
+
+@pytest.mark.asyncio
+async def test_egg_classification_history_endpoint_returns_reversed_and_current_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event_id, old_classification_id, category_id, warehouse_id = (uuid4() for _ in range(4))
+    session = object()
+    async def list_history(received_session: object, received_event_id: object) -> list[dict[str, object]]:
+        assert received_session is session
+        assert received_event_id == event_id
+        return [
+            {
+                "id": old_classification_id,
+                "warehouse_id": warehouse_id,
+                "inventory_status": "REVERSED",
+                "allocations": [{"category_id": category_id, "category_code": "GRADE-A", "egg_count": 12}],
+            }
+        ]
+
+    monkeypatch.setattr(
+        "avicola_pro.modules.production.api.routes.production_service.list_egg_classifications", list_history
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            return session
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+    class Database:
+        def session_factory(self) -> SessionContext:
+            return SessionContext()
+
+    router = build_production_router(
+        object(),
+        object(),
+        cast(DatabaseResources, Database()),
+        SimpleNamespace(add=lambda *_: None),
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and route.path.endswith("/{production_event_id}/classifications")
+        and "GET" in (route.methods or set())
+    )
+    response = await route.endpoint(event_id)
+    assert response[0].inventory_status == "REVERSED"
+    assert response[0].allocations[0].category_code == "GRADE-A"
+    assert response[0].allocations[0].egg_count == 12
+

@@ -48,6 +48,18 @@ describe("backend-for-frontend proxy allowlist", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("rejects traversal segments before proxying an allowlisted prefix", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "http://backend:8000");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+
+    const response = await GET(new Request("http://frontend/api/v1/reports/../admin/users") as never, {
+      params: Promise.resolve({ path: ["v1", "reports", "..", "admin", "users"] }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("forwards approved request headers and returns only approved backend headers", async () => {
     vi.stubEnv("BACKEND_INTERNAL_URL", "http://backend:8000");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -84,4 +96,22 @@ describe("backend-for-frontend proxy allowlist", () => {
     expect(response.headers.get("set-cookie")).toContain("session=rotated");
     expect(response.headers.has("x-internal-debug")).toBe(false);
   });
+
+  it("forwards the approved path's query parameters to the backend", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "http://backend:8000");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+
+    const request = new Request(
+      "http://frontend/api/v1/reports/commercial?date_from=2026-09-01&date_to=2026-09-24&channel=RETAIL",
+    );
+    await GET(request as never, {
+      params: Promise.resolve({ path: ["v1", "reports", "commercial"] }),
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://backend:8000/api/v1/reports/commercial?date_from=2026-09-01&date_to=2026-09-24&channel=RETAIL",
+      expect.any(Object),
+    );
+  });
 });
+

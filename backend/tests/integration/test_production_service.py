@@ -275,6 +275,21 @@ async def test_egg_production_classification_posts_atomic_stock_and_is_idempoten
         )
         assert replacement_created and replacement.id != classification.id
         assert replacement.inventory_document_id != classification.inventory_document_id
+        classification_history = await production_service.list_egg_classifications(session, event.id)
+        history_by_id = {item["id"]: item for item in classification_history}
+        assert set(history_by_id) == {classification.id, replacement.id}
+        assert history_by_id[classification.id] == {
+            "id": classification.id,
+            "warehouse_id": warehouse_id,
+            "inventory_status": "REVERSED",
+            "allocations": [{"category_id": category_id, "category_code": "SYNTHETIC-CAT", "egg_count": 120}],
+        }
+        assert history_by_id[replacement.id] == {
+            "id": replacement.id,
+            "warehouse_id": warehouse_id,
+            "inventory_status": "CONFIRMED",
+            "allocations": [{"category_id": category_id, "category_code": "SYNTHETIC-CAT", "egg_count": 120}],
+        }
         saved_classifications = list(
             (
                 await session.scalars(
@@ -340,3 +355,4 @@ async def test_zero_egg_production_classifies_without_creating_stock_document() 
                 session, event.id, classification.id, actor, "No receipt to reverse"
             )
     await engine.dispose()
+

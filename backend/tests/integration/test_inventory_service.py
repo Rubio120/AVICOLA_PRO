@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from avicola_pro.modules.inventory.infrastructure.models import (
     InventoryCostVariance,
     InventoryDocument,
     InventoryDocumentLine,
+    InventoryMovement,
 )
 from avicola_pro.modules.settings.infrastructure.models import UnitOfMeasure
 
@@ -139,3 +141,116 @@ async def test_confirmed_receipts_and_issue_reconcile_moving_average() -> None:
         movement_id = movement_row[0]
         with pytest.raises(errors.RaiseException, match="append-only"):
             cursor.execute("update inventory_movements set unit_cost = 999 where id = %s", (movement_id,))
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_concurrent_issues_cannot_oversell_the_same_inventory_balance() -> None:
+    engine = create_async_engine(_database_url())
+    session_factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    actor_id, product_id, warehouse_id = uuid4(), uuid4(), uuid4()
+    issue_ids = (uuid4(), uuid4())
+
+    async with session_factory() as session, session.begin():
+        session.add(
+            User(
+                id=actor_id,
+                username="concurrent-inventory",
+                email="concurrent-inventory@example.test",
+                display_name="Concurrent inventory test",
+                password_hash="fixture-hash",  # noqa: S106 - synthetic fixture value, never a credential
+            )
+        )
+        session.add(
+            Product(
+                id=product_id,
+                sku="INV-CONCURRENT-001",
+                name="Concurrent issue test",
+                product_type="INPUT",
+                base_unit_code="unit",
+            )
+        )
+        session.add(Warehouse(id=warehouse_id, code="INV-CONCURRENT-WH", name="Concurrent inventory warehouse"))
+
+    async with session_factory() as session, session.begin():
+        receipt = InventoryDocument(
+            id=uuid4(), document_type="RECEIPT", effective_date=date(2026, 9, 19), warehouse_id=warehouse_id
+        )
+        session.add(receipt)
+        await session.flush()
+        session.add(
+            InventoryDocumentLine(
+                id=uuid4(),
+                document_id=receipt.id,
+                ordinal=1,
+                product_id=product_id,
+                quantity=Decimal("10"),
+                unit_cost=Decimal("2"),
+                direction="IN",
+            )
+        )
+        await session.flush()
+        await inventory_service.confirm(session, receipt.id, actor_id)
+        for issue_id in issue_ids:
+            issue = InventoryDocument(
+                id=issue_id,
+                document_type="ISSUE",
+                effective_date=date(2026, 9, 19),
+                warehouse_id=warehouse_id,
+            )
+            session.add(issue)
+            await session.flush()
+            session.add(
+                InventoryDocumentLine(
+                    id=uuid4(),
+                    document_id=issue_id,
+                    ordinal=1,
+                    product_id=product_id,
+                    quantity=Decimal("6"),
+                    unit_cost=Decimal("0"),
+                    direction="OUT",
+                )
+            )
+        await session.flush()
+
+    async def confirm_issue(issue_id: UUID) -> bool:
+        try:
+            async with session_factory() as session, session.begin():
+                await inventory_service.confirm(session, issue_id, actor_id)
+        except InventoryConflictError:
+            return False
+        return True
+
+    outcomes = await asyncio.gather(*(confirm_issue(issue_id) for issue_id in issue_ids))
+    assert outcomes.count(True) == 1
+    assert outcomes.count(False) == 1
+
+    async with session_factory() as session:
+        balance = await session.scalar(
+            select(InventoryBalance).where(
+                InventoryBalance.warehouse_id == warehouse_id,
+                InventoryBalance.product_id == product_id,
+            )
+        )
+        statuses = list(
+            (
+                await session.scalars(
+                    select(InventoryDocument.status).where(InventoryDocument.id.in_(issue_ids))
+                )
+            ).all()
+        )
+        movements = list(
+            (
+                await session.scalars(
+                    select(InventoryMovement).where(InventoryMovement.document_id.in_(issue_ids))
+                )
+            ).all()
+        )
+        assert balance is not None
+        assert balance.quantity == Decimal("4.0000")
+        assert statuses.count("CONFIRMED") == 1
+        assert statuses.count("DRAFT") == 1
+        assert len(movements) == 1
+        assert movements[0].quantity_delta == Decimal("-6.0000")
+    await engine.dispose()
+
