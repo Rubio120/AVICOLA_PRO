@@ -392,6 +392,65 @@ jobs:
           name: image-security-sarif
           path: trivy-*.sarif
           if-no-files-found: ignore
+      - name: Summarize runtime image findings
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def values(value, *wanted):
+              found = []
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      normalized = key.casefold().replace("_", "")
+                      if any(term in normalized for term in wanted) and isinstance(child, (str, int, float)):
+                          found.append(str(child))
+                      else:
+                          found.extend(values(child, *wanted))
+              elif isinstance(value, list):
+                  for child in value:
+                      found.extend(values(child, *wanted))
+              return list(dict.fromkeys(item for item in found if item))
+
+          reports = sorted(Path(".").glob("trivy-*.sarif"))
+          if not reports:
+              print("No Trivy SARIF report was produced; the image-scan gate will report scan failures.")
+          for report in reports:
+              print(f"::group::Image security findings: {report.name}")
+              try:
+                  document = json.loads(report.read_text(encoding="utf-8"))
+                  results = [result for run in document.get("runs", []) for result in run.get("results", [])]
+                  if not results:
+                      print("No HIGH/CRITICAL findings recorded in this SARIF report.")
+                  for result in results:
+                      properties = result.get("properties", {})
+                      package = values(properties, "pkgname", "packagename", "package")
+                      installed = values(properties, "installedversion", "currentversion")
+                      fixed = values(properties, "fixedversion", "patchedversion")
+                      targets = [
+                          location.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "")
+                          for location in result.get("locations", [])
+                      ]
+                      message = result.get("message", {}).get("text", "").replace("\n", " ")
+                      print(
+                          " | ".join(
+                              (
+                                  f"rule={result.get('ruleId', 'unknown')}",
+                                  f"severity={result.get('level', 'unknown')} / {properties.get('security-severity', 'n/a')}",
+                                  f"package={', '.join(package) or 'see SARIF message'}",
+                                  f"installed={', '.join(installed) or 'n/a'}",
+                                  f"fixed={', '.join(fixed) or 'no fix listed'}",
+                                  f"target={', '.join(target for target in targets if target) or 'n/a'}",
+                                  f"message={message[:500] or 'n/a'}",
+                              )
+                          )
+                      )
+              except (OSError, json.JSONDecodeError, AttributeError, TypeError) as error:
+                  print(f"Unable to summarize {report.name}: {type(error).__name__}; full SARIF remains available as an artifact.")
+              print("::endgroup::")
+          PY
       - name: Enforce all image security scans
         if: always()
         shell: bash
@@ -595,3 +654,4 @@ jobs:
             echo "Attestation accepted a modified bundle" >&2
             exit 1
           fi
+
