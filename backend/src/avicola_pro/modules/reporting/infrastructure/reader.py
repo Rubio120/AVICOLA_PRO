@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -13,6 +13,7 @@ from avicola_pro.modules.reporting.domain.poultry_metrics import (
     feed_cost_per_egg,
     feed_per_bird,
     posture_rate,
+    stock_coverage_days,
 )
 from avicola_pro.modules.reporting.domain.rules import ReportFilter
 
@@ -49,6 +50,9 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
         "date_from": filters.date_from or date.min,
         "date_to": filters.date_to or date.max,
     }
+    coverage_to = filters.date_to or date.today()
+    metric_params["coverage_from"] = coverage_to - timedelta(days=29)
+    metric_params["coverage_to"] = coverage_to
     metrics = await session.execute(
         text(
             """
@@ -116,15 +120,31 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
                ) first_invoices
                where first_invoice >= :date_from
                  and first_invoice <= :date_to) as new_customer_count,
-               (select count(*) from commercial_documents
+              (select count(*) from commercial_documents
                where status = 'ISSUED' and document_type = 'INVOICE' and customer_id is null
-                 and document_date <= :date_to) as unassigned_invoice_count
+                 and document_date <= :date_to) as unassigned_invoice_count,
+              (select coalesce(sum(ib.quantity), 0) from inventory_balances ib
+               join products p on p.id = ib.product_id
+               join egg_categories ec on ec.product_id = p.id
+               where p.base_unit_code = 'unit' and ec.is_saleable and ec.is_active) as saleable_egg_stock,
+              (select coalesce(sum(
+                 case when d.document_type = 'CREDIT_NOTE' then -line.quantity else line.quantity end
+               ), 0)
+               from commercial_documents d
+               join commercial_document_lines line on line.commercial_document_id = d.id
+               join products p on p.id = line.product_id
+               join egg_categories ec on ec.product_id = p.id
+               where d.status = 'ISSUED' and d.document_type in ('INVOICE', 'CREDIT_NOTE')
+                 and p.base_unit_code = 'unit' and ec.is_saleable and ec.is_active
+                 and d.document_date >= :coverage_from and d.document_date <= :coverage_to) as net_egg_sales_30d
             """
         ),
         metric_params,
     )
     metric_row = metrics.one()
     egg_count = int(metric_row.egg_count)
+    saleable_egg_stock = Decimal(metric_row.saleable_egg_stock)
+    net_egg_sales_30d = Decimal(metric_row.net_egg_sales_30d)
     feed_records = int(metric_row.feed_records)
     feed_records_in_kg = int(metric_row.feed_records_in_kg)
     costed_feed_records = int(metric_row.costed_feed_records)
@@ -166,7 +186,11 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
             if int(metric_row.unassigned_invoice_count) > 0
             else MetricResult(Decimal(metric_row.new_customer_count), "customers", True)
         ),
-        "stock_coverage": MetricResult(None, "days", False, "historical_sales_conversion_missing"),
+        "stock_coverage": (
+            MetricResult(None, "days", False, "net_egg_sales_last_30_days_nonpositive")
+            if net_egg_sales_30d < 0
+            else stock_coverage_days(saleable_egg_stock, net_egg_sales_30d)
+        ),
     }
     for key, query in {
         "inventory_value": "select coalesce(sum(inventory_value), 0) as value from inventory_balances",

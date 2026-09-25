@@ -62,6 +62,8 @@ async def test_dashboard_aggregates_confirmed_operational_facts() -> None:
                     saleable_egg_count=25_000,
                     new_customer_count=1,
                     unassigned_invoice_count=0,
+                    saleable_egg_stock=Decimal("900"),
+                    net_egg_sales_30d=Decimal("85"),
                 )
             ),
             *[FakeResult(scalar=Decimal("10.00")) for _ in range(6)],
@@ -77,6 +79,7 @@ async def test_dashboard_aggregates_confirmed_operational_facts() -> None:
     assert result["poultry_metrics"]["feed_per_bird"].value == Decimal("0.2")
     assert result["poultry_metrics"]["feed_conversion"].value == Decimal("0.2")
     assert result["poultry_metrics"]["feed_cost_per_egg"].value == Decimal("5")
+    assert result["poultry_metrics"]["stock_coverage"].value == Decimal("900") * Decimal("30") / Decimal("85")
     assert session.statements[0][1] is not None
     assert "date_from" in session.statements[0][1]
 
@@ -98,6 +101,8 @@ async def test_dashboard_marks_feed_metrics_unavailable_when_unit_is_not_kg() ->
                     saleable_egg_count=0,
                     new_customer_count=0,
                     unassigned_invoice_count=0,
+                    saleable_egg_stock=Decimal("0"),
+                    net_egg_sales_30d=Decimal("0"),
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
@@ -127,6 +132,8 @@ async def test_dashboard_marks_metrics_unavailable_for_missing_birds_cost_and_cu
                     saleable_egg_count=0,
                     new_customer_count=0,
                     unassigned_invoice_count=1,
+                    saleable_egg_stock=Decimal("0"),
+                    net_egg_sales_30d=Decimal("0"),
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
@@ -161,6 +168,8 @@ async def test_dashboard_marks_feed_unavailable_when_no_feed_records_exist() -> 
                     saleable_egg_count=0,
                     new_customer_count=0,
                     unassigned_invoice_count=0,
+                    saleable_egg_stock=Decimal("0"),
+                    net_egg_sales_30d=Decimal("0"),
                 )
             ),
             *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
@@ -173,6 +182,38 @@ async def test_dashboard_marks_feed_unavailable_when_no_feed_records_exist() -> 
     assert result["poultry_metrics"]["feed_per_bird"].reason == "feed_data_missing"
     assert result["poultry_metrics"]["feed_conversion"].reason == "feed_data_missing"
     assert result["poultry_metrics"]["feed_cost_per_egg"].reason == "feed_data_missing"
+    assert result["poultry_metrics"]["stock_coverage"].reason == "sales_last_30_days_is_zero"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_marks_coverage_unavailable_when_credits_exceed_recent_egg_sales() -> None:
+    session = FakeSession(
+        [
+            FakeResult(row=SimpleNamespace(count=0, total=Decimal("0"))),
+            FakeResult(
+                row=SimpleNamespace(
+                    egg_count=0,
+                    average_live_birds=None,
+                    feed_kg=Decimal("0"),
+                    feed_records=0,
+                    feed_records_in_kg=0,
+                    costed_feed_records=0,
+                    confirmed_feed_cost=Decimal("0"),
+                    saleable_egg_count=0,
+                    new_customer_count=0,
+                    unassigned_invoice_count=0,
+                    saleable_egg_stock=Decimal("900"),
+                    net_egg_sales_30d=Decimal("-5"),
+                )
+            ),
+            *[FakeResult(scalar=Decimal("0")) for _ in range(6)],
+        ]
+    )
+
+    result = await reader.dashboard(session, ReportFilter(date_to=date(2026, 1, 31)))
+
+    assert result["poultry_metrics"]["stock_coverage"].available is False
+    assert result["poultry_metrics"]["stock_coverage"].reason == "net_egg_sales_last_30_days_nonpositive"
 
 
 @pytest.mark.asyncio

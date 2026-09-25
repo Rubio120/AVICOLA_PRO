@@ -72,6 +72,13 @@ def test_stock_coverage_uses_the_thirty_day_average_sales_rate() -> None:
     assert result.unit == "days"
 
 
+def test_stock_coverage_preserves_decimal_net_sales_after_credit_notes() -> None:
+    result = stock_coverage_days(Decimal("900"), Decimal("85.5"))
+
+    assert result.value == Decimal("900") * Decimal("30") / Decimal("85.5")
+    assert result.available
+
+
 @pytest.mark.parametrize(
     ("function", "arguments"),
     [
@@ -81,6 +88,7 @@ def test_stock_coverage_uses_the_thirty_day_average_sales_rate() -> None:
         (feed_cost_per_egg, (Decimal("-1"), 1)),
         (average_ticket, (Decimal("-1"), 1)),
         (stock_coverage_days, (Decimal("1"), -1)),
+        (stock_coverage_days, (Decimal("1"), Decimal("-0.5"))),
     ],
 )
 def test_metric_rules_reject_negative_facts(function: Callable[..., object], arguments: tuple[object, ...]) -> None:

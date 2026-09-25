@@ -86,9 +86,14 @@ def average_ticket(net_sales: Decimal, issued_invoice_count: int) -> MetricResul
     )
 
 
-def stock_coverage_days(saleable_stock: Decimal, sales_last_30_days: int) -> MetricResult:
-    if isinstance(sales_last_30_days, bool) or not isinstance(sales_last_30_days, int) or sales_last_30_days < 0:
-        raise ValueError("sales_last_30_days must be a nonnegative integer")
+def stock_coverage_days(saleable_stock: Decimal, sales_last_30_days: Decimal | int) -> MetricResult:
+    if (
+        isinstance(sales_last_30_days, bool)
+        or not isinstance(sales_last_30_days, (Decimal, int))
+        or not Decimal(sales_last_30_days).is_finite()
+        or sales_last_30_days < 0
+    ):
+        raise ValueError("sales_last_30_days must be finite and nonnegative")
     return _ratio(
         saleable_stock * Decimal("30"),
         Decimal(sales_last_30_days),

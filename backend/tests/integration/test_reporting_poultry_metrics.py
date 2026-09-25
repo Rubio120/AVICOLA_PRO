@@ -89,7 +89,7 @@ async def test_dashboard_calculates_coverage_from_base_unit_egg_sales() -> None:
 
     coverage = result["poultry_metrics"]["stock_coverage"]
     assert coverage.available is True
-    assert coverage.value == Decimal("270")
+    assert coverage.value == Decimal("900") * Decimal("30") / Decimal("85")
 
 
 async def _dashboard_fixture(*, include_reversed_feed: bool, include_unlinked_feed: bool) -> dict[str, Any]:
@@ -463,6 +463,7 @@ async def _seed_fixture(
     for document, quantity, unit_price in (
         (invoice_a, Decimal("40"), Decimal("25")),
         (invoice_b, Decimal("60"), Decimal("100") / Decimal("3")),
+        (credit_note, Decimal("15"), Decimal("100") / Decimal("3")),
         (draft_invoice, Decimal("100"), Decimal("90")),
         (outside_invoice, Decimal("500"), Decimal("14")),
         (reversed_invoice, Decimal("200"), Decimal("40")),
