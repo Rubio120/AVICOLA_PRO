@@ -40,7 +40,7 @@ def _entrypoint_environment(tmp_path: Path) -> tuple[dict[str, str], str, str]:
 def test_backend_runtime_uses_trivy_fixed_setuptools_version() -> None:
     dockerfile = BACKEND_DOCKERFILE.read_text(encoding="utf-8")
 
-    assert "setuptools==78.1.1" in dockerfile
+    assert "setuptools==84.0.0" in dockerfile
 
 
 def test_container_entrypoint_loads_mounted_secrets_without_leaking_them(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_runbooks_keep_restore_target_permissions_and_destructive_actions_safe()
     assert "alembic downgrade" in rollback
     assert "base aislada" in rollback
     assert "prune" in incident.lower() and "no ejecutar" in incident.lower()
-    assert "No ejecutarlo en producción sin aprobación" in install
+    assert "No ejecutarlo en producci�n sin aprobaci�n" in install
 
 
 def test_deployment_compose_uses_immutable_image_digest_references() -> None:
@@ -160,6 +160,15 @@ def test_postgres_ci_healthcheck_targets_the_database_created_at_container_start
     health_database = health_arguments[health_arguments.index("-d") + 1]
 
     assert health_database == bootstrap_database
+
+
+def test_windows_ci_stops_when_a_native_tool_returns_nonzero() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW_FILE.read_text(encoding="utf-8"))
+    backend_checks, frontend_checks = workflow["jobs"]["windows-toolchains"]["steps"][3:5]
+
+    for step in (backend_checks, frontend_checks):
+        assert step["shell"] == "pwsh"
+        assert "$PSNativeCommandUseErrorActionPreference = $true" in step["run"]
 
 
 def test_postgres_ci_migration_has_a_synthetic_session_hmac_key() -> None:
@@ -205,7 +214,7 @@ def test_compose_runtime_smoke_migrates_and_authenticates_with_synthetic_data() 
     assert 'assert not services["db"].get("ports")' in run_script
     assert 'assert not services["backend"].get("ports")' in run_script
     assert "/health/ready" in run_script
-    assert "0013_sales_channel" in run_script
+    assert "0014_egg_classification_reversal" in run_script
     assert "python /app/entrypoints/backend.py alembic current" in run_script
     assert "python /app/entrypoints/backend.py avicola-pro bootstrap-admin" in run_script
     assert "bootstrap-admin" in run_script

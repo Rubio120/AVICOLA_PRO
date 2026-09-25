@@ -373,13 +373,36 @@ class ProductionService:
                 raise ProductionConflictError("Idempotency key was already used for a different classification")
             return existing, False
 
-        previous = await session.scalar(
-            select(EggProductionClassification)
-            .where(EggProductionClassification.production_event_id == event.id)
-            .with_for_update()
+        previous_classifications = list(
+            (
+                await session.scalars(
+                    select(EggProductionClassification)
+                    .where(EggProductionClassification.production_event_id == event.id)
+                    .order_by(EggProductionClassification.created_at, EggProductionClassification.id)
+                    .with_for_update()
+                )
+            ).all()
         )
-        if previous is not None:
-            raise ProductionConflictError("Egg production event is already classified")
+        for previous in previous_classifications:
+            if previous.inventory_document_id is None:
+                raise ProductionConflictError("Previous egg classification has no inventory receipt")
+            previous_receipt = await session.scalar(
+                select(InventoryDocument)
+                .where(InventoryDocument.id == previous.inventory_document_id)
+                .with_for_update()
+            )
+            if previous_receipt is None or previous_receipt.status != "REVERSED":
+                raise ProductionConflictError("Egg production event is already classified")
+            confirmed_reversal = await session.scalar(
+                select(InventoryDocument.id)
+                .where(
+                    InventoryDocument.reversal_of_id == previous_receipt.id,
+                    InventoryDocument.status == "CONFIRMED",
+                )
+                .with_for_update()
+            )
+            if confirmed_reversal is None:
+                raise ProductionConflictError("Previous egg production receipt has no confirmed reversal document")
         warehouse = await session.scalar(
             select(Warehouse).where(Warehouse.id == warehouse_id, Warehouse.is_active.is_(True)).with_for_update()
         )
@@ -411,7 +434,7 @@ class ProductionService:
                 warehouse_id=warehouse_id,
                 source_type="egg_production",
                 source_id=event.id,
-                reason="Clasificación de producción de huevos",
+                reason="Clasificaci�n de producci�n de huevos",
             )
             session.add(inventory_document)
             await session.flush()
@@ -456,6 +479,38 @@ class ProductionService:
             except InventoryConflictError as exc:
                 raise ProductionConflictError(str(exc)) from exc
         return classification, True
+
+    async def reverse_egg_classification(
+        self,
+        session: AsyncSession,
+        production_event_id: UUID,
+        classification_id: UUID,
+        actor_user_id: UUID,
+        reason: str,
+    ) -> Any:
+        if not reason.strip():
+            raise ProductionConflictError("Egg classification reversal reason is required")
+        event = await session.scalar(
+            select(EggProductionEvent).where(EggProductionEvent.id == production_event_id).with_for_update()
+        )
+        if event is None:
+            raise ProductionNotFoundError("Egg production event not found")
+        classification = await session.scalar(
+            select(EggProductionClassification)
+            .where(
+                EggProductionClassification.id == classification_id,
+                EggProductionClassification.production_event_id == event.id,
+            )
+            .with_for_update()
+        )
+        if classification is None:
+            raise ProductionNotFoundError("Egg production classification not found")
+        if classification.inventory_document_id is None:
+            raise ProductionConflictError("Egg classification has no inventory receipt")
+        try:
+            return await inventory_service.reverse(session, classification.inventory_document_id, actor_user_id, reason)
+        except InventoryConflictError as exc:
+            raise ProductionConflictError(str(exc)) from exc
 
     async def list_egg_production_options(self, session: AsyncSession, on_date: date) -> list[dict[str, Any]]:
         statement = (

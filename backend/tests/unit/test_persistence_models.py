@@ -128,7 +128,7 @@ def test_egg_inventory_models_require_explicit_configuration_and_classification(
 
     classifications = tables["egg_production_classifications"]
     assert classifications.c.warehouse_id.nullable is False
-    assert classifications.c.production_event_id.unique is True
+    assert classifications.c.production_event_id.unique is not True
     assert classifications.c.inventory_document_id.nullable is True
 
     allocations = tables["egg_production_allocations"]

@@ -180,7 +180,7 @@ class EggProductionClassification(Base):
     __tablename__ = "egg_production_classifications"
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     production_event_id: Mapped[UUID] = mapped_column(
-        ForeignKey("egg_production_events.id", ondelete="RESTRICT"), nullable=False, unique=True
+        ForeignKey("egg_production_events.id", ondelete="RESTRICT"), nullable=False
     )
     warehouse_id: Mapped[UUID] = mapped_column(ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False)
     inventory_document_id: Mapped[UUID | None] = mapped_column(

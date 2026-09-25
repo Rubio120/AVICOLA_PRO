@@ -10,7 +10,7 @@ from uuid import uuid4
 import psycopg
 import pytest
 from psycopg import errors
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -116,6 +116,15 @@ EXPECTED_TABLES = {
 def _reset_schema() -> None:
     _run_alembic("downgrade", "base")
     _run_alembic("upgrade", "head")
+
+
+def _classification_event_has_unique_constraint() -> bool:
+    engine = create_engine(_database_url())
+    try:
+        constraints = inspect(engine).get_unique_constraints("egg_production_classifications")
+        return any(set(item["column_names"]) == {"production_event_id"} for item in constraints)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -235,6 +244,21 @@ def test_sales_channel_migration_preserves_history_as_unclassified() -> None:
     }
     assert any(name.endswith("sales_order_channel_valid") for name in constraints)
     assert any(name.endswith("commercial_document_channel_valid") for name in constraints)
+
+
+@pytest.mark.integration
+def test_classification_reversal_migration_round_trips_from_0013() -> None:
+    _run_alembic("downgrade", "0013_sales_channel")
+    assert _classification_event_has_unique_constraint()
+
+    _run_alembic("upgrade", "head")
+    assert not _classification_event_has_unique_constraint()
+
+    _run_alembic("downgrade", "0013_sales_channel")
+    assert _classification_event_has_unique_constraint()
+
+    _run_alembic("upgrade", "head")
+    assert not _classification_event_has_unique_constraint()
 
 
 @pytest.mark.integration

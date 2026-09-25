@@ -65,7 +65,11 @@ async def dashboard(session: Any, filters: ReportFilter) -> dict[str, Any]:
                  group by fdr.record_date
                ) daily) as average_live_birds,
               (select count(*) from feed_consumption fc
-               where fc.occurred_on >= :date_from
+               join inventory_movements im on im.id = fc.inventory_movement_id
+               join inventory_documents d on d.id = im.document_id
+               where d.status = 'CONFIRMED' and im.movement_type = 'ISSUE'
+                 and im.reversal_of_id is null
+                 and fc.occurred_on >= :date_from
                  and fc.occurred_on <= :date_to) as feed_records,
               (select count(*) from feed_consumption fc join products p on p.id = fc.product_id
                join inventory_movements im on im.id = fc.inventory_movement_id

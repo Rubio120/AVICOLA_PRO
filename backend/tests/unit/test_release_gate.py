@@ -16,7 +16,7 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
-EXPECTED_HEAD = "0013_sales_channel"
+EXPECTED_HEAD = "0014_egg_classification_reversal"
 EXPECTED_TAG = "v0.1.0-rc.1"
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 GIT = shutil.which("git")

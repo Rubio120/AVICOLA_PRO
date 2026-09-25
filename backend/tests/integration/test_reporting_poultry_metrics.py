@@ -92,9 +92,7 @@ async def test_dashboard_calculates_coverage_from_base_unit_egg_sales() -> None:
     assert coverage.value == Decimal("270")
 
 
-async def _dashboard_fixture(
-    *, include_reversed_feed: bool, include_unlinked_feed: bool
-) -> dict[str, Any]:
+async def _dashboard_fixture(*, include_reversed_feed: bool, include_unlinked_feed: bool) -> dict[str, Any]:
     load_persistence_models()
     engine = create_async_engine(_database_url())
     try:

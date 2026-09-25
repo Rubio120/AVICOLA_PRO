@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -166,7 +170,7 @@ def test_restore_target_requires_another_explicitly_disposable_database_and_full
 
 
 def test_restore_reports_reconciliation_evidence_after_successful_verification(
-    monkeypatch, capsys
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     source = "postgresql+psycopg://app:secret@db:5432/avicola_pro"
     target = "postgresql+psycopg://restore:secret@restore-db:5432/avicola_restore_drill"
@@ -178,7 +182,7 @@ def test_restore_reports_reconciliation_evidence_after_successful_verification(
     )
     monkeypatch.setattr(restore_module, "_target_is_empty", lambda _environment, _timeout: True)
 
-    def successful_command(arguments, **_kwargs):
+    def successful_command(arguments: Sequence[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
         if arguments[0] == restore_module.RESTIC and arguments[1] == "restore":
             archive = Path(arguments[arguments.index("--target") + 1]) / restore_module.ARCHIVE_NAME
             archive.write_bytes(b"synthetic postgres archive")
@@ -188,7 +192,7 @@ def test_restore_reports_reconciliation_evidence_after_successful_verification(
             )
         return subprocess.CompletedProcess(arguments, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(restore_module.subprocess, "run", successful_command)
+    monkeypatch.setattr("deploy.backup.restore.subprocess.run", successful_command)
     monkeypatch.setattr(
         restore_module,
         "_restic_environment",

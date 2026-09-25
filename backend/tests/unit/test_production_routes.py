@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -11,6 +11,7 @@ from starlette.requests import Request
 
 from avicola_pro.modules.production.api.routes import (
     AdjustmentPayload,
+    EggClassificationReversalPayload,
     EggRecordPayload,
     FlockPayload,
     build_production_router,
@@ -56,6 +57,12 @@ def test_egg_record_payload_accepts_zero_and_rejects_fractional_counts() -> None
             egg_count=Decimal("1.5"),  # type: ignore[arg-type]
             idempotency_key="eggs-2026-09-19-02",
         )
+
+
+def test_egg_classification_reversal_payload_requires_a_nonblank_reason() -> None:
+    assert EggClassificationReversalPayload(reason="Correct classification").reason == "Correct classification"
+    with pytest.raises(ValidationError):
+        EggClassificationReversalPayload(reason="   ")
     with pytest.raises(ValidationError):
         EggRecordPayload(
             flock_id=uuid4(),
@@ -158,3 +165,76 @@ def test_egg_production_routes_are_registered() -> None:
     assert ("GET", "/api/v1/production/egg-record-options") in endpoints
     assert ("GET", "/api/v1/production/egg-records/unclassified") in endpoints
     assert ("POST", "/api/v1/production/egg-records/{production_event_id}/classifications") in endpoints
+    assert (
+        "POST",
+        "/api/v1/production/egg-records/{production_event_id}/classifications/{classification_id}/reverse",
+    ) in endpoints
+
+
+@pytest.mark.asyncio
+async def test_egg_classification_reversal_endpoint_audits_the_compensation(monkeypatch: pytest.MonkeyPatch) -> None:
+    event_id, classification_id, receipt_id, reversal_id = (uuid4() for _ in range(4))
+    actor_id = uuid4()
+    service_arguments: list[tuple[object, ...]] = []
+    audit_records: list[object] = []
+
+    async def reverse(*args: object) -> SimpleNamespace:
+        service_arguments.append(args)
+        return SimpleNamespace(id=reversal_id, reversal_of_id=receipt_id, status="CONFIRMED")
+
+    monkeypatch.setattr(
+        "avicola_pro.modules.production.api.routes.production_service.reverse_egg_classification", reverse
+    )
+
+    class Session:
+        def begin(self) -> "Session":
+            return self
+
+        async def __aenter__(self) -> "Session":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+    class Database:
+        def __init__(self) -> None:
+            self.session = Session()
+
+        def session_factory(self) -> Session:
+            return self.session
+
+    database = Database()
+    audit = SimpleNamespace(add=lambda _session, record: audit_records.append(record))
+    router = build_production_router(
+        object(),
+        object(),
+        cast(DatabaseResources, database),
+        audit,
+        "session",
+        security_events=SimpleNamespace(write=lambda *_: None),
+    )
+    route = next(
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and route.path.endswith("/{classification_id}/reverse")
+        and "POST" in (route.methods or set())
+    )
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "query_string": b""})
+    request.state.correlation_id = str(uuid4())
+    user = SimpleNamespace(id=actor_id, username="egg-reviewer")
+
+    response = await route.endpoint(
+        event_id,
+        classification_id,
+        EggClassificationReversalPayload(reason="Correct classification"),
+        request,
+        user,
+        object(),
+    )
+
+    assert (response.id, response.reversal_of_id, response.status) == (reversal_id, receipt_id, "CONFIRMED")
+    assert service_arguments == [(database.session, event_id, classification_id, actor_id, "Correct classification")]
+    assert len(audit_records) == 1
+    assert cast(Any, audit_records[0]).action == "production.eggs.classification.reverse"
+    assert cast(Any, audit_records[0]).resource_id == str(reversal_id)

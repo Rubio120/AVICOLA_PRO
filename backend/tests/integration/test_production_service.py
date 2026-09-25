@@ -19,6 +19,7 @@ from avicola_pro.modules.inventory.infrastructure.models import (
     EggProductionAllocation,
     EggProductionClassification,
     InventoryBalance,
+    InventoryDocument,
 )
 from avicola_pro.modules.production.application.service import ProductionConflictError, production_service
 from avicola_pro.modules.production.infrastructure.models import (
@@ -175,7 +176,8 @@ async def test_egg_production_classification_posts_atomic_stock_and_is_idempoten
     actor, flock_id, farm_id, house_id = uuid4(), uuid4(), uuid4(), uuid4()
     warehouse_id, product_id, category_id = uuid4(), uuid4(), uuid4()
     record_date = date(2026, 9, 19)
-    async with factory() as session, session.begin():
+    async with factory() as session:
+        transaction = await session.begin()
         session.add(
             User(
                 id=actor,
@@ -241,6 +243,55 @@ async def test_egg_production_classification_posts_atomic_stock_and_is_idempoten
         balance = await session.scalar(select(InventoryBalance).where(InventoryBalance.warehouse_id == warehouse_id))
         assert balance is not None and balance.quantity == Decimal("120.0000")
         assert classification.inventory_document_id is not None
+        with pytest.raises(ProductionConflictError, match="already classified"):
+            await production_service.classify_egg_production(
+                session, event.id, warehouse_id, [(category_id, 120)], "egg-classification-before-reversal", actor
+            )
+
+        reversal = await production_service.reverse_egg_classification(
+            session, event.id, classification.id, actor, "Correct classification"
+        )
+        assert reversal.reversal_of_id == classification.inventory_document_id
+        original_receipt = await session.get(InventoryDocument, classification.inventory_document_id)
+        assert original_receipt is not None and original_receipt.status == "REVERSED"
+        assert (await session.get(EggProductionClassification, classification.id)) is not None
+        assert (
+            await session.scalar(
+                select(EggProductionAllocation.egg_count).where(
+                    EggProductionAllocation.classification_id == classification.id
+                )
+            )
+            == 120
+        )
+        balance = await session.scalar(select(InventoryBalance).where(InventoryBalance.warehouse_id == warehouse_id))
+        assert balance is not None and balance.quantity == Decimal("0.0000")
+
+        with pytest.raises(ProductionConflictError, match="already reversed"):
+            await production_service.reverse_egg_classification(
+                session, event.id, classification.id, actor, "Second reversal"
+            )
+        replacement, replacement_created = await production_service.classify_egg_production(
+            session, event.id, warehouse_id, [(category_id, 120)], "egg-classification-after-reversal", actor
+        )
+        assert replacement_created and replacement.id != classification.id
+        assert replacement.inventory_document_id != classification.inventory_document_id
+        saved_classifications = list(
+            (
+                await session.scalars(
+                    select(EggProductionClassification).where(
+                        EggProductionClassification.production_event_id == event.id
+                    )
+                )
+            ).all()
+        )
+        assert {item.id for item in saved_classifications} == {classification.id, replacement.id}
+        balance = await session.scalar(select(InventoryBalance).where(InventoryBalance.warehouse_id == warehouse_id))
+        assert balance is not None and balance.quantity == Decimal("120.0000")
+        with pytest.raises(ProductionConflictError, match="already classified"):
+            await production_service.classify_egg_production(
+                session, event.id, warehouse_id, [(category_id, 120)], "egg-classification-third", actor
+            )
+        await transaction.rollback()
     await engine.dispose()
 
 
@@ -284,4 +335,8 @@ async def test_zero_egg_production_classifies_without_creating_stock_document() 
         )
         assert created and classification.inventory_document_id is None
         assert await session.scalar(select(InventoryBalance.id)) is None
+        with pytest.raises(ProductionConflictError, match="no inventory receipt"):
+            await production_service.reverse_egg_classification(
+                session, event.id, classification.id, actor, "No receipt to reverse"
+            )
     await engine.dispose()

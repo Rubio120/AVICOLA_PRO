@@ -18,7 +18,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get upgrade --yes \
-    && python -m pip install --no-cache-dir --upgrade setuptools==78.1.1 \
+    && python -m pip install --no-cache-dir --upgrade setuptools==84.0.0 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 avicola \
     && useradd --system --uid 10001 --gid avicola --home-dir /app --shell /usr/sbin/nologin avicola

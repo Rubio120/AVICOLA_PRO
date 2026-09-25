@@ -100,6 +100,10 @@ class EggClassificationPayload(StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
+class EggClassificationReversalPayload(StrictModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class FlockResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -139,6 +143,13 @@ class EggClassificationResponse(BaseModel):
     production_event_id: UUID
     warehouse_id: UUID
     inventory_document_id: UUID | None
+
+
+class EggClassificationReversalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    reversal_of_id: UUID
+    status: str
 
 
 def build_production_router(
@@ -412,6 +423,31 @@ def build_production_router(
             if created:
                 add_audit(session, user, request, "production.eggs.classify", str(classification.id))
             return EggClassificationResponse.model_validate(classification)
+
+    @router.post(
+        "/egg-records/{production_event_id}/classifications/{classification_id}/reverse",
+        response_model=EggClassificationReversalResponse,
+        status_code=201,
+    )
+    async def reverse_egg_classification(
+        production_event_id: UUID,
+        classification_id: UUID,
+        payload: EggClassificationReversalPayload,
+        request: Request,
+        user: Any = Depends(require("inventory.adjustments.approve")),  # noqa: B008
+        _: Any = Depends(csrf_user),  # noqa: B008
+    ) -> EggClassificationReversalResponse:  # noqa: B008
+        async with database.session_factory() as session, session.begin():
+            try:
+                reversal = await production_service.reverse_egg_classification(
+                    session, production_event_id, classification_id, user.id, payload.reason
+                )
+            except ProductionNotFoundError as exc:
+                raise ForbiddenError(code="not_found", detail=str(exc)) from None
+            except ProductionConflictError as exc:
+                raise ForbiddenError(code="invalid_egg_classification", detail=str(exc)) from None
+            add_audit(session, user, request, "production.eggs.classification.reverse", str(reversal.id))
+            return EggClassificationReversalResponse.model_validate(reversal)
 
     @router.get("/egg-record-options", response_model=list[EggProductionOptionResponse])
     async def egg_record_options(
