@@ -300,4 +300,3 @@ class InventoryService:
 
 
 inventory_service = InventoryService()
-

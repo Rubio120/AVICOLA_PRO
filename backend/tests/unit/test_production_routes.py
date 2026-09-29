@@ -294,4 +294,3 @@ async def test_egg_classification_history_endpoint_returns_reversed_and_current_
     assert response[0].inventory_status == "REVERSED"
     assert response[0].allocations[0].category_code == "GRADE-A"
     assert response[0].allocations[0].egg_count == 12
-

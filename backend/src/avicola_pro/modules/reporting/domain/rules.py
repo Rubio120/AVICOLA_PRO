@@ -160,4 +160,3 @@ def _package_relationship_xml() -> bytes:
         },
     )
     return cast(bytes, ET.tostring(root, encoding="utf-8", xml_declaration=True))
-

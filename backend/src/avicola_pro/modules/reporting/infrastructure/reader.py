@@ -363,4 +363,3 @@ async def commercial_sales(
         }
         for item in result.mappings()
     ]
-

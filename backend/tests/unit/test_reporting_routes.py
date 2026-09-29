@@ -159,4 +159,3 @@ async def test_xlsx_export_uses_channel_filter_audits_and_enforces_row_limit(mon
         await route.endpoint(request, ReportFilter(offset=1, limit=1000), user)
     assert len(seen_filters) == 1
     assert len(audit_rows) == 1
-

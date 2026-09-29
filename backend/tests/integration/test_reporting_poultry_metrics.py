@@ -783,4 +783,3 @@ def _commercial_document(
         total=total,
         original_document_id=original_document_id,
     )
-

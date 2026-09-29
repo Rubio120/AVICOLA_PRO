@@ -434,7 +434,7 @@ class ProductionService:
                 warehouse_id=warehouse_id,
                 source_type="egg_production",
                 source_id=event.id,
-                reason="Clasificaci�n de producci�n de huevos",
+                reason="Clasificaci?n de producci?n de huevos",
             )
             session.add(inventory_document)
             await session.flush()
@@ -643,4 +643,3 @@ class ProductionService:
 
 
 production_service = ProductionService()
-

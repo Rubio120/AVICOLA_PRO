@@ -355,4 +355,3 @@ async def test_zero_egg_production_classifies_without_creating_stock_document() 
                 session, event.id, classification.id, actor, "No receipt to reverse"
             )
     await engine.dispose()
-

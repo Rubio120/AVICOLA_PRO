@@ -76,4 +76,3 @@ def test_build_csv_neutralizes_formula_like_text_without_changing_numbers() -> N
         ["' +SUM(A1:A2)", "-3"],
         ["'@SUM(1,2)", "0"],
     ]
-

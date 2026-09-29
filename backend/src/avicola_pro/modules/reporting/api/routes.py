@@ -324,4 +324,3 @@ def build_reporting_router(
         )
 
     return router
-

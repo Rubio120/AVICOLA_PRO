@@ -244,7 +244,7 @@ async def test_profitability_returns_paged_issued_documents() -> None:
                         "document_date": date(2026, 1, 2),
                         "document_type": "INVOICE",
                         "channel": "RETAIL",
-                        "customer_name_snapshot": "Cliente sint�tico",
+                        "customer_name_snapshot": "Cliente sint?tico",
                         "net_total": Decimal("55.00"),
                     }
                 ]
@@ -320,4 +320,3 @@ def test_xlsx_is_open_xml_and_never_turns_user_strings_into_formulas() -> None:
     assert b"=1+1" in worksheet
     assert b"12.50" in worksheet
     assert b"<f>" not in worksheet
-

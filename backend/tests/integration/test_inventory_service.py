@@ -245,4 +245,3 @@ async def test_concurrent_issues_cannot_oversell_the_same_inventory_balance() ->
         assert len(movements) == 1
         assert movements[0].quantity_delta == Decimal("-6.0000")
     await engine.dispose()
-

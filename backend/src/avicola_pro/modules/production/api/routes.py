@@ -500,4 +500,3 @@ def build_production_router(
                 raise ForbiddenError(code="invalid_production_operation", detail=str(exc)) from None
 
     return router
-
