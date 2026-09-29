@@ -156,11 +156,11 @@ jobs:
       - name: Inspect Python runtime package metadata in backend image
         shell: bash
         run: |
-          docker run --rm --entrypoint /bin/sh avicola-pro-backend:ci -c '
+          docker run --rm --user 0:0 --entrypoint /bin/sh avicola-pro-backend:ci -c '
             for interpreter in /usr/local/bin/python /opt/venv/bin/python; do
               "$interpreter" -c "import importlib.metadata as m,sys; print(\"interpreter=\"+sys.executable); [(print(\"setuptools=\"+d.version+\" path=\"+str(d.locate_file(\"\")))) for d in m.distributions() if (d.metadata.get(\"Name\") or \"\").lower()==\"setuptools\"]"
             done
-            find /usr/local/lib/python3.13 /opt/venv -iname "*setuptools*" -print 2>/dev/null || true
+            find / -iname "*setuptools*" -print 2>/dev/null || true
           '
       - name: Scan backend runtime image
         id: backend_image_scan
