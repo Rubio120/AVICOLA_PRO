@@ -310,7 +310,7 @@ def test_runtime_images_upgrade_os_packages_during_build() -> None:
 
     assert "apk upgrade --no-cache" in backend_dockerfile
     assert "uv pip uninstall --python /opt/venv/bin/python setuptools" in backend_dockerfile
-    assert "python -m pip uninstall --yes setuptools" in backend_dockerfile
+    assert "python -m pip install --no-cache-dir setuptools==84.0.0" in backend_dockerfile
     assert "apt-get upgrade --yes" in frontend_dockerfile
     assert "apk upgrade --no-cache" in backup_dockerfile
     assert "apk add --no-cache python3 ca-certificates" in backup_dockerfile
