@@ -117,7 +117,8 @@ def _matching_verified_attestation(
             digest_mismatch = True
     if repository_mismatch:
         raise ReleaseAttestationError(
-            "verified certificate repository does not match trusted repository"
+            "verified certificate repository does not match trusted repository "
+            f"(sourceRepository={str(repository)[:200]!r}, sourceRepositoryOwner={str(owner)[:200]!r})"
         )
     if signer_mismatch:
         raise ReleaseAttestationError(
