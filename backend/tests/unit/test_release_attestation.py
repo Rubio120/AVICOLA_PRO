@@ -89,9 +89,7 @@ def test_release_attestation_accepts_case_normalized_repository_identity(
     bundle = tmp_path / "avicola-pro-release-bundle.tar"
     bundle.write_bytes(b"synthetic-release-bundle")
     normalized_san = WORKFLOW_SAN.replace("Rubio120/AVICOLA_PRO", "rubio120/avicola_pro")
-    output = _verification_output(
-        bundle, repository="rubio120/avicola_pro", san=normalized_san, owner="rubio120"
-    )
+    output = _verification_output(bundle, repository="rubio120/avicola_pro", san=normalized_san, owner="rubio120")
     monkeypatch.setattr(
         "scripts.verify_release_attestation.subprocess.run",
         lambda arguments, **kwargs: CompletedProcess(arguments, 0, output, ""),
