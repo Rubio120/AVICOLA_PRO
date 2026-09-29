@@ -38,17 +38,15 @@ RUN set -eu; \
         exit 1; \
     fi
 
-FROM postgres:16.15-trixie
+FROM postgres:16.15-alpine3.23
 
 COPY --from=restic-builder /out/restic /usr/local/bin/restic
-RUN apt-get update \
-    && apt-get upgrade --yes \
-    && apt-get install --no-install-recommends --yes python3 ca-certificates \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache python3 ca-certificates \
     && rm -f /usr/local/bin/gosu \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system --gid 10002 avicola-backup \
-    && useradd --system --uid 10002 --gid avicola-backup --home-dir /tmp --shell /usr/sbin/nologin avicola-backup \
-    && install -d --owner=avicola-backup --group=avicola-backup --mode=0700 /opt/avicola/deploy/backup
+    && addgroup -S -g 10002 avicola-backup \
+    && adduser -S -D -H -u 10002 -G avicola-backup -h /tmp -s /bin/false avicola-backup \
+    && install -d -o avicola-backup -g avicola-backup -m 0700 /opt/avicola/deploy/backup
 
 COPY --chown=avicola-backup:avicola-backup deploy/backup/*.py /opt/avicola/deploy/backup/
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp RESTIC_CACHE_DIR=/tmp/restic-cache
