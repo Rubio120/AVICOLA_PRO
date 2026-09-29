@@ -27,6 +27,7 @@ def _verification_output(
     *,
     repository: str = "Rubio120/AVICOLA_PRO",
     san: str = WORKFLOW_SAN,
+    owner: str = "Rubio120",
 ) -> str:
     digest = hashlib.sha256(bundle_path.read_bytes()).hexdigest()
     return json.dumps(
@@ -36,7 +37,7 @@ def _verification_output(
                     "signature": {
                         "certificate": {
                             "sourceRepository": repository,
-                            "sourceRepositoryOwner": "Rubio120",
+                            "sourceRepositoryOwner": owner,
                             "subjectAlternativeName": san,
                         }
                     },
@@ -95,6 +96,26 @@ def test_release_attestation_verifies_exact_source_identity_and_bundle_digest(
         ),
     ],
 )
+def test_release_attestation_accepts_case_normalized_repository_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = tmp_path / "avicola-pro-release-bundle.tar"
+    bundle.write_bytes(b"synthetic-release-bundle")
+    normalized_san = WORKFLOW_SAN.replace("Rubio120/AVICOLA_PRO", "rubio120/avicola_pro")
+    output = _verification_output(
+        bundle, repository="rubio120/avicola_pro", san=normalized_san, owner="rubio120"
+    )
+    monkeypatch.setattr(
+        "scripts.verify_release_attestation.subprocess.run",
+        lambda arguments, **kwargs: CompletedProcess(arguments, 0, output, ""),
+    )
+
+    verified = verify_release_attestation(bundle, COMMIT, SOURCE_REF, gh_executable="gh")
+
+    assert verified["repository"] == "Rubio120/AVICOLA_PRO"
+    assert verified["source_ref"] == SOURCE_REF
+
+
 def test_release_attestation_rejects_invalid_output_or_signer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

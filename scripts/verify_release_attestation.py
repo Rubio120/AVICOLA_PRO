@@ -30,6 +30,28 @@ def _object(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
+def _repository_identity_matches(repository: Any, owner: Any) -> bool:
+    return (
+        isinstance(repository, str)
+        and isinstance(owner, str)
+        and repository.casefold() == REPOSITORY.casefold()
+        and owner.casefold() == "Rubio120".casefold()
+    )
+
+
+def _workflow_san_matches(san: Any, source_ref: str) -> bool:
+    if not isinstance(san, str) or not san.startswith("https://github.com/"):
+        return False
+    components = san.removeprefix("https://github.com/").split("/", maxsplit=2)
+    expected_workflow = SIGNER_WORKFLOW.split(REPOSITORY + "/", maxsplit=1)[1]
+    return (
+        len(components) == 3
+        and components[0].casefold() == "Rubio120".casefold()
+        and components[1].casefold() == "AVICOLA_PRO".casefold()
+        and components[2] == f"{expected_workflow}@{source_ref}"
+    )
+
+
 def _matching_verified_attestation(
     output: Any, *, bundle_name: str, digest: str, source_ref: str
 ) -> str | None:
@@ -51,11 +73,10 @@ def _matching_verified_attestation(
         repository = certificate.get("sourceRepository")
         owner = certificate.get("sourceRepositoryOwner")
         san = certificate.get("subjectAlternativeName")
-        expected_san = f"https://github.com/{REPOSITORY}/{SIGNER_WORKFLOW.split(REPOSITORY + '/', 1)[1]}@{source_ref}"
-        if repository != REPOSITORY or owner != "Rubio120":
+        if not _repository_identity_matches(repository, owner):
             repository_mismatch = True
             continue
-        if san != expected_san:
+        if not _workflow_san_matches(san, source_ref):
             signer_mismatch = True
             continue
 
