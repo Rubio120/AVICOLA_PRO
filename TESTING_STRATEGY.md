@@ -92,6 +92,8 @@ En CI:
 
 Crear fixture representativo, generar copia cifrada, moverla a almacenamiento externo, recuperar ese artefacto, restaurar en nueva instancia, comprobar hashes/versiones/extensiones/configuración, conteos e invariantes, arrancar la aplicación y registrar RPO/RTO observados. Antes del piloto se fijan RPO, RTO, retención, owner y aprobador.
 
+El verificador implementa checks para inventario cantidad/valor, aves y eventos soportados (rechaza `OTHER` sin dirección), sesiones de caja cerradas, AP/AR y asignaciones, además de restricciones validadas para la forma de auditoría/seguridad. No hay hash-chain de auditoría en este esquema. CI debe todavía ejecutar un roundtrip cifrado, password incorrecto, corrupción controlada y rechazo de target no vacío contra PostgreSQL desechable.
+
 ### Seguridad y rendimiento
 
 - Ruff/type checking, SAST, dependency scan, secret scan e image scan.

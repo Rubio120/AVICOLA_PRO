@@ -2,7 +2,18 @@
 
 ## Estado
 
-Este documento define el contrato operativo; los scripts y contenedores se crearán en la Fase 1. Actualmente no existe aplicación instalable.
+La base técnica de la Entrega 1 es instalable desde lockfiles y fue verificada en Windows con Python 3.13.15, `uv` 0.12.15, Node.js 22.23.2, npm 10.9.8 y PostgreSQL 16.14.
+
+En equipos donde PowerShell aplique política `Restricted`, ejecute los scripts propios sin cambiar la política global:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\clean-install.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\db-up.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\migrate.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1
+```
+
+En Windows el script de backend configura un Selector event loop compatible con Psycopg async.
 
 ## Entornos
 
@@ -21,18 +32,19 @@ Este documento define el contrato operativo; los scripts y contenedores se crear
 
 ## Configuración
 
-La aplicación fallará al iniciar si faltan claves obligatorias o se detectan valores inseguros. Variables previstas:
+La aplicación fallará al iniciar si faltan claves obligatorias o se detectan valores inseguros. Variables implementadas en Entrega 1 (prefijo `AVICOLA_`):
 
 ```text
-APP_ENV
-DATABASE_URL
-SECRET_KEY
-ALLOWED_ORIGINS
-COOKIE_SECURE
-LOG_LEVEL
-TIMEZONE=America/Asuncion
-BASE_CURRENCY=PYG
+AVICOLA_ENVIRONMENT
+AVICOLA_DATABASE_URL
+AVICOLA_CORS_ORIGINS
+AVICOLA_LOG_LEVEL
+AVICOLA_LOG_FORMAT
+AVICOLA_TIMEZONE=America/Asuncion
+AVICOLA_BASE_CURRENCY=PYG
 ```
+
+La configuración de producción vive en `deploy/compose/compose.production.yml`: establece ambiente `production`, logs JSON, cookie Secure y CORS limitado al dominio configurado. La URL de base y HMAC se cargan desde archivos secretos externos; no se escriben en argumentos, Docker build args ni en el archivo de entorno versionado.
 
 El repositorio incluirá `.env.example` sin secretos. Certificados, contraseñas y tokens no se almacenarán en Git ni en `app_settings`.
 
@@ -49,7 +61,7 @@ El repositorio incluirá `.env.example` sin secretos. Certificados, contraseñas
 9. Iniciar servicios y comprobar health/readiness.
 10. Ejecutar smoke tests.
 
-Los comandos exactos se incorporarán y probarán en la Fase 1; este documento se actualizará con evidencia real.
+Los scripts de la raíz implementan en Entrega 1 los pasos 2-5 y las comprobaciones técnicas de los pasos 8-10. El seed de permisos y el primer administrador (pasos 6-7) pertenecen a Entrega 2. Docker Compose permanece disponible para entornos con Docker; la verificación local del 2026-09-16 usó el PostgreSQL 16.14 empaquetado para pruebas porque Docker no estaba disponible en la máquina.
 
 ## Migraciones
 
@@ -83,6 +95,8 @@ Validación de restauración:
 ## Despliegue inicial
 
 Un servidor Linux podrá ejecutar proxy TLS, frontend, backend y PostgreSQL o conectarse a una base administrada. PostgreSQL no se expondrá públicamente. Los contenedores se ejecutarán sin root, con health checks, límites y volúmenes explícitos.
+
+La topología Compose y los pasos de secretos, puesta en marcha, rollback, incidentes y restore están en `deploy/runbooks/`. Caddy termina TLS y reenvía todo al frontend/BFF; el frontend accede al backend solo por una red privada. La computadora de desarrollo actual no tiene Docker, por lo que los builds/configuración de imagen aún deben verificarse en CI o en un host Docker.
 
 ## Observabilidad y runbooks
 

@@ -1,0 +1,41 @@
+services:
+  backup:
+    image: ${BACKUP_IMAGE_REF:?Set immutable backup image reference}
+    environment:
+      AVICOLA_DATABASE_URL_FILE: /run/secrets/database_url
+      RESTIC_REPOSITORY_FILE: /run/secrets/restic_repository
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      BACKUP_TAG: ${BACKUP_TAG:-avicola-pro}
+    secrets:
+      - database_url
+      - restic_repository
+      - restic_password
+    networks:
+      - data
+      - backup-egress
+    group_add: ["10001"]
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["operations"]
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+secrets:
+  restic_repository:
+    file: ../../secrets/restic_repository
+  restic_password:
+    file: ../../secrets/restic_password
+
+networks:
+  backup-egress:
