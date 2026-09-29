@@ -162,6 +162,13 @@ jobs:
             done
             find / -iname "*setuptools*" -print 2>/dev/null || true
           '
+      - name: Compare Python base image package inventory
+        shell: bash
+        run: |
+          docker run --rm --user 0:0 --entrypoint /bin/sh python:3.13.15-alpine3.24 -c '
+            /usr/local/bin/python -c "import importlib.metadata as m,sys; print(\"base_interpreter=\"+sys.executable); [(print(\"base_setuptools=\"+d.version+\" path=\"+str(d.locate_file(\"\")))) for d in m.distributions() if (d.metadata.get(\"Name\") or \"\").lower()==\"setuptools\"]"
+            find / -iname "*setuptools*" -print 2>/dev/null || true
+          '
       - name: Scan backend runtime image
         id: backend_image_scan
         continue-on-error: true
