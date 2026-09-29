@@ -19,6 +19,7 @@ WORKDIR /app
 
 RUN apk upgrade --no-cache \
     && python -m pip install --no-cache-dir setuptools==84.0.0 \
+    && python -c "import ensurepip, shutil, sysconfig; from pathlib import Path; purelib=Path(sysconfig.get_path('purelib')); [shutil.rmtree(p) if p.is_dir() else p.unlink() for p in purelib.glob('pip*')]; shutil.rmtree(Path(ensurepip.__file__).parent)" \
     && addgroup -S -g 10001 avicola \
     && adduser -S -D -H -u 10001 -G avicola -h /app -s /bin/false avicola
 COPY --from=builder --chown=avicola:avicola /opt/venv /opt/venv

@@ -311,7 +311,8 @@ def test_runtime_images_upgrade_os_packages_during_build() -> None:
     assert "apk upgrade --no-cache" in backend_dockerfile
     assert "uv pip uninstall --python /opt/venv/bin/python setuptools" in backend_dockerfile
     assert "python -m pip install --no-cache-dir setuptools==84.0.0" in backend_dockerfile
-    assert "apt-get upgrade --yes" in frontend_dockerfile
+    assert "shutil.rmtree(Path(ensurepip.__file__).parent)" in backend_dockerfile
+    assert "apk upgrade --no-cache" in frontend_dockerfile
     assert "apk upgrade --no-cache" in backup_dockerfile
     assert "apk add --no-cache python3 ca-certificates" in backup_dockerfile
 
@@ -322,7 +323,7 @@ def test_runtime_images_use_current_trixie_bases_for_supported_toolchains() -> N
     backup_dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "FROM python:3.13.15-alpine3.24 AS runtime" in backend_dockerfile
-    assert "FROM node:22.23.2-trixie-slim AS runtime" in frontend_dockerfile
+    assert "FROM node:22.23.2-alpine3.24 AS runtime" in frontend_dockerfile
     assert "FROM postgres:16.15-alpine3.23" in backup_dockerfile
     assert "USER 10001:10001" in backend_dockerfile
     assert "USER node" in frontend_dockerfile
