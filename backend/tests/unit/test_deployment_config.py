@@ -293,13 +293,13 @@ def test_release_bundle_preserves_scanned_images_sboms_and_verifiable_attestatio
 
 
 def test_runtime_images_upgrade_os_packages_during_build() -> None:
-    runtime_dockerfiles = (
-        PROJECT_ROOT / "backend" / "Dockerfile",
-        PROJECT_ROOT / "frontend" / "Dockerfile",
-        PROJECT_ROOT / "deploy" / "backup" / "Dockerfile",
-    )
+    backend_dockerfile = (PROJECT_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    frontend_dockerfile = (PROJECT_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    backup_dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert all("apt-get upgrade --yes" in dockerfile.read_text(encoding="utf-8") for dockerfile in runtime_dockerfiles)
+    assert "apk upgrade --no-cache" in backend_dockerfile
+    assert "apt-get upgrade --yes" in frontend_dockerfile
+    assert "apt-get upgrade --yes" in backup_dockerfile
 
 
 def test_runtime_images_use_current_trixie_bases_for_supported_toolchains() -> None:
@@ -307,7 +307,7 @@ def test_runtime_images_use_current_trixie_bases_for_supported_toolchains() -> N
     frontend_dockerfile = (PROJECT_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
     backup_dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "FROM python:3.13.15-slim-trixie AS runtime" in backend_dockerfile
+    assert "FROM python:3.13.15-alpine3.24 AS runtime" in backend_dockerfile
     assert "FROM node:22.23.2-trixie-slim AS runtime" in frontend_dockerfile
     assert "FROM postgres:16.15-trixie" in backup_dockerfile
     assert "USER 10001:10001" in backend_dockerfile
