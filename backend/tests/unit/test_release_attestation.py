@@ -83,19 +83,6 @@ def test_release_attestation_verifies_exact_source_identity_and_bundle_digest(
     assert "--source-ref" in command and command[command.index("--source-ref") + 1] == SOURCE_REF
 
 
-@pytest.mark.parametrize(
-    ("stdout", "repository", "san", "message"),
-    [
-        ("not-json", "Rubio120/AVICOLA_PRO", WORKFLOW_SAN, "JSON"),
-        ("[]", "Rubio120/OTHER", WORKFLOW_SAN, "repository"),
-        (
-            "[]",
-            "Rubio120/AVICOLA_PRO",
-            WORKFLOW_SAN.replace("ci.yml", "other.yml"),
-            "workflow",
-        ),
-    ],
-)
 def test_release_attestation_accepts_case_normalized_repository_identity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -116,6 +103,19 @@ def test_release_attestation_accepts_case_normalized_repository_identity(
     assert verified["source_ref"] == SOURCE_REF
 
 
+@pytest.mark.parametrize(
+    ("stdout", "repository", "san", "message"),
+    [
+        ("not-json", "Rubio120/AVICOLA_PRO", WORKFLOW_SAN, "JSON"),
+        ("[]", "Rubio120/OTHER", WORKFLOW_SAN, "repository"),
+        (
+            "[]",
+            "Rubio120/AVICOLA_PRO",
+            WORKFLOW_SAN.replace("ci.yml", "other.yml"),
+            "workflow",
+        ),
+    ],
+)
 def test_release_attestation_rejects_invalid_output_or_signer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
