@@ -5,7 +5,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 
-PSQL = "/usr/lib/postgresql/16/bin/psql"
+PSQL = "/usr/local/bin/psql"
 
 CHECKS: tuple[tuple[str, str], ...] = (
     (

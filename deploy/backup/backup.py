@@ -11,7 +11,7 @@ from pathlib import Path
 from .db_connection import read_secret_file, write_service_file
 
 RESTIC = "/usr/local/bin/restic"
-PG_DUMP = "/usr/lib/postgresql/16/bin/pg_dump"
+PG_DUMP = "/usr/local/bin/pg_dump"
 
 TAG_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
 

@@ -43,6 +43,17 @@ def test_backend_runtime_uses_trivy_fixed_setuptools_version() -> None:
     assert "setuptools==84.0.0" in dockerfile
 
 
+def test_backup_postgres_cli_paths_match_postgres_alpine_runtime() -> None:
+    backup = (PROJECT_ROOT / "deploy" / "backup" / "backup.py").read_text(encoding="utf-8")
+    restore = (PROJECT_ROOT / "deploy" / "backup" / "restore.py").read_text(encoding="utf-8")
+    verifier = (PROJECT_ROOT / "deploy" / "backup" / "verify_restore.py").read_text(encoding="utf-8")
+
+    assert 'PG_DUMP = "/usr/local/bin/pg_dump"' in backup
+    assert 'PSQL = "/usr/local/bin/psql"' in restore
+    assert 'PG_RESTORE = "/usr/local/bin/pg_restore"' in restore
+    assert 'PSQL = "/usr/local/bin/psql"' in verifier
+
+
 def test_container_entrypoint_loads_mounted_secrets_without_leaking_them(tmp_path: Path) -> None:
     environment, database_url, session_key = _entrypoint_environment(tmp_path)
     child = (

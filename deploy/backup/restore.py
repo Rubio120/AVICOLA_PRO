@@ -16,8 +16,8 @@ TARGET_PATTERN = re.compile(r"avicola_restore_[a-z0-9_]{1,48}\Z")
 ARCHIVE_NAME = "avicola-pro.pgdump"
 VERIFIER = Path(__file__).with_name("verify_restore.py")
 RESTIC = "/usr/local/bin/restic"
-PSQL = "/usr/lib/postgresql/16/bin/psql"
-PG_RESTORE = "/usr/lib/postgresql/16/bin/pg_restore"
+PSQL = "/usr/local/bin/psql"
+PG_RESTORE = "/usr/local/bin/pg_restore"
 PYTHON = "/usr/bin/python3"
 
 

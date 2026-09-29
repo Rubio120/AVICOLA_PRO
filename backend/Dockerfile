@@ -18,7 +18,7 @@ ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apk upgrade --no-cache \
-    && python -m pip uninstall --yes setuptools \
+    && python -m pip install --no-cache-dir setuptools==84.0.0 \
     && addgroup -S -g 10001 avicola \
     && adduser -S -D -H -u 10001 -G avicola -h /app -s /bin/false avicola
 COPY --from=builder --chown=avicola:avicola /opt/venv /opt/venv
