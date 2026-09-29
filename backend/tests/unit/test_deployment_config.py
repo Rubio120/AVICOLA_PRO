@@ -298,6 +298,8 @@ def test_runtime_images_upgrade_os_packages_during_build() -> None:
     backup_dockerfile = (PROJECT_ROOT / "deploy" / "backup" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "apk upgrade --no-cache" in backend_dockerfile
+    assert "uv pip uninstall --python /opt/venv/bin/python setuptools" in backend_dockerfile
+    assert "python -m pip uninstall --yes setuptools" in backend_dockerfile
     assert "apt-get upgrade --yes" in frontend_dockerfile
     assert "apt-get upgrade --yes" in backup_dockerfile
 

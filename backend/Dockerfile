@@ -11,14 +11,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY backend/src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable \
-    && uv pip install --python /opt/venv/bin/python --no-deps setuptools==84.0.0
+    && uv pip uninstall --python /opt/venv/bin/python setuptools
 
 FROM python:3.13.15-alpine3.24 AS runtime
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apk upgrade --no-cache \
-    && python -m pip install --no-cache-dir --upgrade setuptools==84.0.0 \
+    && python -m pip uninstall --yes setuptools \
     && addgroup -S -g 10001 avicola \
     && adduser -S -D -H -u 10001 -G avicola -h /app -s /bin/false avicola
 COPY --from=builder --chown=avicola:avicola /opt/venv /opt/venv
