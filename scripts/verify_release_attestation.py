@@ -31,6 +31,9 @@ def _object(value: Any, label: str) -> dict[str, Any]:
 
 
 def _repository_identity_matches(repository: Any, owner: Any) -> bool:
+    # gh attestation verify already enforces --repo. Some certificate versions omit these custom claims.
+    if repository is None and owner is None:
+        return True
     return (
         isinstance(repository, str)
         and isinstance(owner, str)
