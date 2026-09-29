@@ -284,6 +284,7 @@ def test_release_bundle_preserves_scanned_images_sboms_and_verifiable_attestatio
     )
 
     assert all(f"avicola-pro-{name}.tar" in export["run"] for name in ("backend", "frontend", "backup"))
+    assert '"--format", "{{.Id}}"' in export["run"]
     assert image_artifact["with"]["name"] == "runtime-image-archives"
     assert set(packaging["needs"]) >= {
         "windows-toolchains",

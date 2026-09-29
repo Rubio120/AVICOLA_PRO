@@ -508,7 +508,7 @@ jobs:
           names = ("backend", "frontend", "backup")
           metadata = {
               name: subprocess.check_output(
-                  ["docker", "image", "inspect", f"avicola-pro-{name}:ci", "--format", "{{{{.Id}}}}"],
+                  ["docker", "image", "inspect", f"avicola-pro-{name}:ci", "--format", "{{.Id}}"],
                   text=True,
               ).strip()
               for name in names
